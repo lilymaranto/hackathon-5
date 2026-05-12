@@ -93,6 +93,10 @@ export type BrazeCoreGanttSpanResizeProps = {
   getTimelineWidthPx: () => number;
   templateSpanWeeksForTile: (tile: TileRecord) => number;
   onSpanChange: (tile: TileRecord, span: number) => void;
+  /** When `"aiAdsChevron"`, uses {@link clampAdsChevronSpanWeeks} (AI Decisioning Gantt bars). */
+  spanResizeMode?: "braze" | "aiAdsChevron";
+  /** Override handle hit height in px (e.g. match Gantt bar height). */
+  spanResizeHandleHeightPx?: number;
 };
 
 export type BrazeCoreGanttChartProps = {
@@ -113,6 +117,15 @@ export type BrazeCoreGanttChartProps = {
   timelineRailRef?: Ref<HTMLDivElement | null>;
   /** When set with `readOnly={false}`, shows an east-edge resize handle on each bar. */
   spanResize?: BrazeCoreGanttSpanResizeProps;
+  /**
+   * When set, rows are grouped by these lane ids (milestone merge is per-lane only).
+   * Use with {@link matchAiDecisioningSwimlaneBars} for AI Decisioning Studio.
+   */
+  laneLegend?: ReadonlyArray<{ id: Workstream; label: string; color: string }>;
+  /** Second legend row heading (default `Workstreams`). */
+  laneLegendTitle?: string;
+  /** AI Decisioning: Gantt bars + key match swimlane (lavender activities, violet milestones). */
+  matchAiDecisioningSwimlaneBars?: boolean;
 };
 
 /** Must match {@link CanvasBoard} `tileStableKey` for shared DnD ids. */
@@ -120,6 +133,8 @@ function tileStableKey(tile: TileRecord): string {
   return tile.CaboodlePatchKey ?? `${tile.Config_ID}__${tile.Tile_ID}`;
 }
 
+/** AI Gantt: omit this milestone from the chart (still on swimlane / server data). */
+const ADS_GANTT_OMIT_TILE_IDS = new Set(["ads_ms_kickoff"]);
 const WEEKLY_ALIGNMENT_TILE_ID = "weekly_alignment";
 /** Campaign: optional phase 2 is always its own row (after phase 1 + milestone block). */
 const CAMPAIGN_PHASE_2_TILE_IDS = new Set(["launch_phase_2", "phase_2_optional"]);
@@ -134,8 +149,17 @@ function tileKey(tile: TileRecord): string {
   return tile.CaboodlePatchKey ?? `${tile.Config_ID}__${tile.Tile_ID}`;
 }
 
-function workstreamColor(workstreamId: Workstream): string {
+function brazeWorkstreamColor(workstreamId: Workstream): string {
   return WORKSTREAMS.find((w) => w.id === workstreamId)?.color ?? "#300266";
+}
+
+function resolveWorkstreamColor(
+  workstreamId: Workstream,
+  laneLegend: ReadonlyArray<{ id: Workstream; label: string; color: string }> | undefined,
+): string {
+  const fromLegend = laneLegend?.find((l) => l.id === workstreamId)?.color;
+  if (fromLegend) return fromLegend;
+  return brazeWorkstreamColor(workstreamId);
 }
 
 function sortTilesForWorkstream(a: TileRecord, b: TileRecord): number {
@@ -205,6 +229,54 @@ function buildGanttRowsByWorkstream(tiles: TileRecord[]): TileRecord[][] {
 
   return out;
 }
+
+/** Same milestone-merge rules as {@link buildGanttRowsByWorkstream}, but scoped per lane (no cross-lane merge). */
+function buildGanttRowsByLaneOrder(
+  tiles: TileRecord[],
+  laneOrder: readonly Workstream[],
+): TileRecord[][] {
+  const byLane = new Map<Workstream, TileRecord[]>();
+  for (const t of tiles) {
+    const list = byLane.get(t.Workstream) ?? [];
+    list.push(t);
+    byLane.set(t.Workstream, list);
+  }
+  const out: TileRecord[][] = [];
+
+  for (const laneId of laneOrder) {
+    const laneTiles = byLane.get(laneId);
+    if (!laneTiles?.length) continue;
+    const sorted = [...laneTiles].sort(sortTilesForWorkstream);
+    for (const t of sorted) {
+      if (t.Category === "milestone") {
+        if (out.length === 0) {
+          out.push([t]);
+          continue;
+        }
+        const lastRow = out[out.length - 1]!;
+        const lastLane = lastRow[0]!.Workstream;
+        if (lastLane === laneId && lastRow.some((x) => x.Category !== "milestone")) {
+          lastRow.push(t);
+        } else {
+          out.push([t]);
+        }
+      } else {
+        out.push([t]);
+      }
+    }
+  }
+
+  return out;
+}
+
+const ADS_GANTT_MILESTONE_ACCENT = "#801ED7";
+const ADS_GANTT_CUSTOMER_BG = "#C9C4EF";
+const ADS_GANTT_CUSTOMER_BORDER = "#801ED7";
+const ADS_GANTT_CUSTOMER_TEXT = "#300266";
+/** AI Gantt left rail + onboarding tiles — align with swimlane {@link CanvasBoard} `tileClass`. */
+const ADS_GANTT_LEFT_RAIL_CUSTOMER_BG = "#C9C4EF";
+const ADS_GANTT_LEFT_RAIL_ONBOARDING_BG = "#300266";
+const ADS_GANTT_ONBOARDING_TILE_BG = "#300266";
 
 function assignLanesInRow(
   tiles: TileRecord[],
@@ -304,6 +376,7 @@ function GanttRowTimelineRailDroppable({
 function GanttTaskBarDraggable({
   tile,
   workstreamHue,
+  matchAiDecisioningSwimlaneBars,
   leftPct,
   widthPct,
   topPx,
@@ -311,13 +384,15 @@ function GanttTaskBarDraggable({
 }: {
   tile: TileRecord;
   workstreamHue: string;
+  matchAiDecisioningSwimlaneBars?: boolean;
   leftPct: number;
   widthPct: number;
   topPx: number;
   onOpen: () => void;
 }) {
   const cat = tile.Category;
-  const solidFill = workstreamHue;
+  const milestoneFill = matchAiDecisioningSwimlaneBars ? ADS_GANTT_MILESTONE_ACCENT : workstreamHue;
+  const activityLaneFill = workstreamHue;
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: tileStableKey(tile),
   });
@@ -334,6 +409,26 @@ function GanttTaskBarDraggable({
     "absolute flex h-8 items-center justify-center gap-1 overflow-hidden rounded-md px-1.5 text-center text-[13px] font-medium leading-tight shadow-sm";
   const grabClass = cat !== "milestone" ? "cursor-grab active:cursor-grabbing" : "";
   const draggingClass = isDragging ? "z-20 opacity-80" : "";
+
+  if (cat === "onboarding_session" && matchAiDecisioningSwimlaneBars) {
+    return (
+      <button
+        ref={setNodeRef}
+        type="button"
+        aria-label={tile.Title}
+        title={tile.Title}
+        className={clsx(common, "border-0 text-white", grabClass, draggingClass)}
+        style={{
+          ...posStyle,
+          backgroundColor: ADS_GANTT_ONBOARDING_TILE_BG,
+          color: "#ffffff",
+        }}
+        onClick={onOpen}
+        {...listeners}
+        {...attributes}
+      />
+    );
+  }
 
   if (cat === "onboarding_session") {
     return (
@@ -356,6 +451,27 @@ function GanttTaskBarDraggable({
     );
   }
 
+  if (cat === "customer_activity" && matchAiDecisioningSwimlaneBars) {
+    return (
+      <button
+        ref={setNodeRef}
+        type="button"
+        aria-label={tile.Title}
+        title={tile.Title}
+        className={clsx(common, "border-2 bg-transparent", grabClass, draggingClass)}
+        style={{
+          ...posStyle,
+          backgroundColor: ADS_GANTT_CUSTOMER_BG,
+          borderColor: ADS_GANTT_CUSTOMER_BORDER,
+          color: ADS_GANTT_CUSTOMER_TEXT,
+        }}
+        onClick={onOpen}
+        {...listeners}
+        {...attributes}
+      />
+    );
+  }
+
   const isMilestone = cat === "milestone";
   if (isMilestone) {
     return (
@@ -367,7 +483,7 @@ function GanttTaskBarDraggable({
         style={{
           ...posStyle,
           borderColor: "#ffffff",
-          color: solidFill,
+          color: milestoneFill,
         }}
         onClick={onOpen}
         {...listeners}
@@ -376,12 +492,12 @@ function GanttTaskBarDraggable({
         <Star
           size={16}
           className="shrink-0"
-          style={{ color: solidFill }}
-          fill={solidFill}
-          stroke={solidFill}
+          style={{ color: milestoneFill }}
+          fill={milestoneFill}
+          stroke={milestoneFill}
           aria-hidden
         />
-        <span className="line-clamp-2 w-full font-semibold" style={{ color: solidFill }}>
+        <span className="line-clamp-2 w-full font-semibold" style={{ color: milestoneFill }}>
           {tile.Title}
         </span>
       </button>
@@ -398,7 +514,7 @@ function GanttTaskBarDraggable({
         className={clsx(common, "border-0 text-white", grabClass, draggingClass)}
         style={{
           ...posStyle,
-          backgroundColor: solidFill,
+          backgroundColor: activityLaneFill,
         }}
         onClick={onOpen}
         {...listeners}
@@ -415,7 +531,7 @@ function GanttTaskBarDraggable({
       className={clsx(common, "border-0 text-white", grabClass, draggingClass)}
       style={{
         ...posStyle,
-        backgroundColor: solidFill,
+        backgroundColor: activityLaneFill,
       }}
       onClick={onOpen}
       {...listeners}
@@ -430,6 +546,7 @@ function GanttTaskBarDraggable({
 function GanttTaskBarStatic({
   tile,
   workstreamHue,
+  matchAiDecisioningSwimlaneBars,
   leftPct,
   widthPct,
   topPx,
@@ -437,13 +554,15 @@ function GanttTaskBarStatic({
 }: {
   tile: TileRecord;
   workstreamHue: string;
+  matchAiDecisioningSwimlaneBars?: boolean;
   leftPct: number;
   widthPct: number;
   topPx: number;
   onOpen: () => void;
 }) {
   const cat = tile.Category;
-  const solidFill = workstreamHue;
+  const milestoneFill = matchAiDecisioningSwimlaneBars ? ADS_GANTT_MILESTONE_ACCENT : workstreamHue;
+  const activityLaneFill = workstreamHue;
   const posStyle: CSSProperties = {
     left: `${leftPct}%`,
     width: `${Math.max(widthPct, 0.4)}%`,
@@ -452,6 +571,23 @@ function GanttTaskBarStatic({
   };
   const common =
     "absolute flex h-8 items-center justify-center gap-1 overflow-hidden rounded-md px-1.5 text-center text-[13px] font-medium leading-tight shadow-sm";
+
+  if (cat === "onboarding_session" && matchAiDecisioningSwimlaneBars) {
+    return (
+      <button
+        type="button"
+        aria-label={tile.Title}
+        title={tile.Title}
+        className={clsx(common, "border-0 text-white")}
+        style={{
+          ...posStyle,
+          backgroundColor: ADS_GANTT_ONBOARDING_TILE_BG,
+          color: "#ffffff",
+        }}
+        onClick={onOpen}
+      />
+    );
+  }
 
   if (cat === "onboarding_session") {
     return (
@@ -471,6 +607,24 @@ function GanttTaskBarStatic({
     );
   }
 
+  if (cat === "customer_activity" && matchAiDecisioningSwimlaneBars) {
+    return (
+      <button
+        type="button"
+        aria-label={tile.Title}
+        title={tile.Title}
+        className={clsx(common, "border-2 bg-transparent")}
+        style={{
+          ...posStyle,
+          backgroundColor: ADS_GANTT_CUSTOMER_BG,
+          borderColor: ADS_GANTT_CUSTOMER_BORDER,
+          color: ADS_GANTT_CUSTOMER_TEXT,
+        }}
+        onClick={onOpen}
+      />
+    );
+  }
+
   if (cat === "milestone") {
     return (
       <button
@@ -480,19 +634,19 @@ function GanttTaskBarStatic({
         style={{
           ...posStyle,
           borderColor: "#ffffff",
-          color: solidFill,
+          color: milestoneFill,
         }}
         onClick={onOpen}
       >
         <Star
           size={16}
           className="shrink-0"
-          style={{ color: solidFill }}
-          fill={solidFill}
-          stroke={solidFill}
+          style={{ color: milestoneFill }}
+          fill={milestoneFill}
+          stroke={milestoneFill}
           aria-hidden
         />
-        <span className="line-clamp-2 w-full font-semibold" style={{ color: solidFill }}>
+        <span className="line-clamp-2 w-full font-semibold" style={{ color: milestoneFill }}>
           {tile.Title}
         </span>
       </button>
@@ -508,7 +662,7 @@ function GanttTaskBarStatic({
         className={clsx(common, "border-0 text-white")}
         style={{
           ...posStyle,
-          backgroundColor: solidFill,
+          backgroundColor: activityLaneFill,
         }}
         onClick={onOpen}
       />
@@ -522,7 +676,7 @@ function GanttTaskBarStatic({
       className={clsx(common, "border-0 text-white")}
       style={{
         ...posStyle,
-        backgroundColor: solidFill,
+        backgroundColor: activityLaneFill,
       }}
       onClick={onOpen}
     >
@@ -546,20 +700,34 @@ export function BrazeCoreGanttChart({
   readOnly = true,
   timelineRailRef,
   spanResize,
+  laneLegend,
+  laneLegendTitle = "Workstreams",
+  matchAiDecisioningSwimlaneBars = false,
 }: BrazeCoreGanttChartProps) {
   const categoryExampleHue = WORKSTREAMS[0]!.color;
 
-  const visibleGanttTiles = useMemo(
-    () =>
-      showOnboardingSessions
-        ? tiles
-        : tiles.filter((tile) => tile.Category !== "onboarding_session"),
-    [tiles, showOnboardingSessions],
-  );
-  const ganttRows = useMemo(
-    () => buildGanttRowsByWorkstream(visibleGanttTiles),
-    [visibleGanttTiles],
-  );
+  const visibleGanttTiles = useMemo(() => {
+    let list = showOnboardingSessions
+      ? tiles
+      : tiles.filter((tile) => tile.Category !== "onboarding_session");
+    if (matchAiDecisioningSwimlaneBars) {
+      list = list.filter((t) => !ADS_GANTT_OMIT_TILE_IDS.has(t.Tile_ID));
+    }
+    return list;
+  }, [tiles, showOnboardingSessions, matchAiDecisioningSwimlaneBars]);
+  const ganttRows = useMemo(() => {
+    if (laneLegend?.length) {
+      return buildGanttRowsByLaneOrder(
+        visibleGanttTiles,
+        laneLegend.map((l) => l.id),
+      );
+    }
+    return buildGanttRowsByWorkstream(visibleGanttTiles);
+  }, [visibleGanttTiles, laneLegend]);
+
+  const streamLegendRows = laneLegend?.length
+    ? laneLegend
+    : WORKSTREAMS.map((ws) => ({ id: ws.id, label: ws.label, color: ws.color }));
 
   const showColumnGuides = showMonthsRow || planOptionId === "growth_silver";
   const timelineGuideStyle = useMemo(() => {
@@ -582,59 +750,102 @@ export function BrazeCoreGanttChart({
 
   return (
     <div className="w-full min-w-0">
-      <div className="mb-4 flex flex-col gap-3 border-b border-[#E8E5F8] px-1 pb-3 text-base text-[#2F2354]">
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-          <span className="font-semibold text-[#2c1650]">Key</span>
-          <span className="inline-flex items-center gap-2">
-            <span
-              className="inline-block h-6 w-10 rounded border-0 shadow-sm"
-              style={{ backgroundColor: categoryExampleHue }}
-              aria-hidden
-            />
-            <span className="font-medium" style={{ color: categoryExampleHue }}>
-              Customer Activity
-            </span>
-          </span>
-          <span className="inline-flex items-center gap-2">
-            <span
-              className="inline-block h-6 w-10 rounded border-2 bg-white shadow-sm"
-              style={{ borderColor: categoryExampleHue }}
-              aria-hidden
-            />
-            <span>Onboarding Session</span>
-          </span>
-          <span className="inline-flex items-center gap-2">
-            <span
-              className="inline-flex h-6 w-10 items-center justify-center rounded border-2 border-white bg-white shadow-sm ring-1 ring-black/5"
-              aria-hidden
-            >
-              <Star
-                size={16}
-                style={{ color: categoryExampleHue }}
-                fill={categoryExampleHue}
-                stroke={categoryExampleHue}
-              />
-            </span>
-            <span>Project milestone</span>
-          </span>
-        </div>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-[#f0ebfb] pt-3">
-          <span className="text-sm font-semibold uppercase tracking-wide text-[#6B5A9A]">
-            Workstreams
-          </span>
-          {WORKSTREAMS.map((ws) => (
-            <span key={ws.id} className="inline-flex items-center gap-1.5">
-              <span
-                className="inline-block h-4 w-7 shrink-0 rounded shadow-sm ring-1 ring-black/5"
-                style={{ backgroundColor: ws.color }}
-                aria-hidden
-              />
-              <span className="max-w-[11rem] truncate text-sm text-[#2F2354]" title={ws.label}>
-                {ws.label}
+      <div className="mb-4 flex flex-col gap-3 border-b border-[#E8E5F8] px-1 pb-3 text-sm text-[#2F2354]">
+        {matchAiDecisioningSwimlaneBars ? (
+          <div className="flex flex-col gap-3">
+            <p className="font-semibold text-[#2c1650]">AI Decisioning Studio Key</p>
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+              <span className="inline-flex items-center gap-2">
+                <Star
+                  size={26}
+                  className="shrink-0"
+                  fill={ADS_GANTT_MILESTONE_ACCENT}
+                  color={ADS_GANTT_MILESTONE_ACCENT}
+                  stroke={ADS_GANTT_MILESTONE_ACCENT}
+                  aria-hidden
+                />
+                <span className="font-semibold text-[#801ED7]">Key Milestone</span>
               </span>
-            </span>
-          ))}
-        </div>
+              <span className="inline-flex items-center gap-2">
+                <span
+                  className="inline-block h-8 w-16 shrink-0 rounded-md bg-[#300266] shadow-sm"
+                  aria-hidden
+                />
+                <span>
+                  <span className="font-semibold text-[#300266]">
+                    Primarily BrazeAI Decisioning Studio™
+                  </span>
+                </span>
+              </span>
+              <span className="inline-flex items-center gap-2">
+                <span
+                  className="inline-block h-8 w-16 shrink-0 rounded-md border-2 border-[#801ED7] bg-[#C9C4EF] shadow-sm"
+                  aria-hidden
+                />
+                <span>
+                  <span className="font-semibold text-[#300266]">
+                    Combination of BrazeAI Decisioning Studio™ and Customer
+                  </span>
+                </span>
+              </span>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+              <span className="font-semibold text-[#2c1650]">Key</span>
+              <span className="inline-flex items-center gap-2">
+                <span
+                  className="inline-block h-6 w-10 rounded border-0 shadow-sm"
+                  style={{ backgroundColor: categoryExampleHue }}
+                  aria-hidden
+                />
+                <span className="font-medium" style={{ color: categoryExampleHue }}>
+                  Customer Activity
+                </span>
+              </span>
+              <span className="inline-flex items-center gap-2">
+                <span
+                  className="inline-block h-6 w-10 rounded border-2 bg-white shadow-sm"
+                  style={{ borderColor: categoryExampleHue }}
+                  aria-hidden
+                />
+                <span>Onboarding Session</span>
+              </span>
+              <span className="inline-flex items-center gap-2">
+                <span
+                  className="inline-flex h-6 w-10 items-center justify-center rounded border-2 border-white bg-white shadow-sm ring-1 ring-black/5"
+                  aria-hidden
+                >
+                  <Star
+                    size={16}
+                    style={{ color: categoryExampleHue }}
+                    fill={categoryExampleHue}
+                    stroke={categoryExampleHue}
+                  />
+                </span>
+                <span>Project milestone</span>
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-[#f0ebfb] pt-3">
+              <span className="text-sm font-semibold uppercase tracking-wide text-[#6B5A9A]">
+                {laneLegendTitle}
+              </span>
+              {streamLegendRows.map((ws) => (
+                <span key={ws.id} className="inline-flex items-center gap-1.5">
+                  <span
+                    className="inline-block h-4 w-7 shrink-0 rounded shadow-sm ring-1 ring-black/5"
+                    style={{ backgroundColor: ws.color }}
+                    aria-hidden
+                  />
+                  <span className="max-w-[11rem] truncate text-sm text-[#2F2354]" title={ws.label}>
+                    {ws.label}
+                  </span>
+                </span>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       <div className="min-w-0 overflow-x-auto">
@@ -706,7 +917,7 @@ export function BrazeCoreGanttChart({
 
           {ganttRows.map((rowTiles) => {
             const wsId = rowTiles[0]!.Workstream;
-            const color = workstreamColor(wsId);
+            const color = resolveWorkstreamColor(wsId, laneLegend);
             const laneAssigned = assignLanesInRow(rowTiles, planOptionId, durationWeeks);
             const maxLane = laneAssigned.reduce((m, x) => Math.max(m, x.lane), 0);
             const rowMinH = rowTimelineMinHeightPx(maxLane);
@@ -716,6 +927,20 @@ export function BrazeCoreGanttChart({
               .filter((t) => t.Category !== "milestone")
               .sort(sortTilesForWorkstream);
 
+            const primaryTile =
+              titleOrder.find((t) => t.Category === "onboarding_session") ??
+              titleOrder.find((t) => t.Category === "customer_activity");
+            const leftRailBg = matchAiDecisioningSwimlaneBars
+              ? primaryTile?.Category === "onboarding_session"
+                ? ADS_GANTT_LEFT_RAIL_ONBOARDING_BG
+                : ADS_GANTT_LEFT_RAIL_CUSTOMER_BG
+              : color;
+            const leftRailLabelColor = matchAiDecisioningSwimlaneBars
+              ? primaryTile?.Category === "onboarding_session"
+                ? "#ffffff"
+                : ADS_GANTT_CUSTOMER_TEXT
+              : "#ffffff";
+
             return (
               <div
                 key={rowKey}
@@ -723,13 +948,14 @@ export function BrazeCoreGanttChart({
               >
                 <div
                   className="flex flex-col justify-center gap-1 border-r border-[#E8E5F8] px-3 py-1"
-                  style={{ backgroundColor: color }}
+                  style={{ backgroundColor: leftRailBg }}
                 >
                   {titleOrder.map((tile) => (
                     <button
                       key={tileKey(tile)}
                       type="button"
-                      className="text-left text-base font-semibold leading-snug text-white drop-shadow-sm hover:underline"
+                      className="text-left text-base font-semibold leading-snug drop-shadow-sm hover:underline"
+                      style={{ color: leftRailLabelColor }}
                       onClick={() => onOpenTile(tile)}
                     >
                       {tile.Title}
@@ -759,6 +985,7 @@ export function BrazeCoreGanttChart({
                         <TaskBar
                           tile={tile}
                           workstreamHue={color}
+                          matchAiDecisioningSwimlaneBars={matchAiDecisioningSwimlaneBars}
                           leftPct={leftPct}
                           widthPct={widthPct}
                           topPx={topPx}
@@ -775,6 +1002,8 @@ export function BrazeCoreGanttChart({
                               getTimelineWidthPx={spanResize.getTimelineWidthPx}
                               onSpanChange={(span) => spanResize.onSpanChange(tile, span)}
                               heightClass="h-8"
+                              mode={spanResize.spanResizeMode ?? "braze"}
+                              handleHeightPx={spanResize.spanResizeHandleHeightPx}
                             />
                           </div>
                         ) : null}

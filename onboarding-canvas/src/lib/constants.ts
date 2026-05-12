@@ -15,6 +15,18 @@ export const AI_DECISIONING_STUDIO_TIMELINE_WEEKS = 16 as PlanDurationWeeks;
 /** Fixed swimlane keys for the AI Decisioning canvas (paste tiles with these `Workstream` values). */
 export const ADS_CANVAS_LANE_IDS = ["one", "two", "three", "four"] as const satisfies readonly Workstream[];
 
+/** Gantt / legend row hues for ADS lanes (left rail + workstream color for session borders). */
+export const AI_DECISIONING_GANTT_LANE_LEGEND: ReadonlyArray<{
+  id: (typeof ADS_CANVAS_LANE_IDS)[number];
+  label: string;
+  color: string;
+}> = [
+  { id: "one", label: "Lane 1", color: "#91186E" },
+  { id: "two", label: "Lane 2", color: "#801ED7" },
+  { id: "three", label: "Lane 3", color: "#861CB4" },
+  { id: "four", label: "Lane 4", color: "#300266" },
+];
+
 /** Same order as the Channels fieldset (first checked wins for marketing-assets copy). */
 const ADS_CHANNEL_PICK_ORDER: (keyof ChannelPreferences)[] = [
   "email",

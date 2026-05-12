@@ -380,7 +380,7 @@ const AI_DECISIONING_STUDIO_TEMPLATE: SeedTemplateTile[] = withDefaultStackOrder
     Workstream: "one",
     Title: "First formal results readout",
     Start_Week: 14,
-    Span_Weeks: 1,
+    Span_Weeks: 2,
     Category: "milestone",
   },
 

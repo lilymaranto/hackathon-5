@@ -11,6 +11,7 @@ import { TileDrawer } from "@/components/TileDrawer";
 import {
   adsChevronDisplayTitle,
   ADS_CANVAS_LANE_IDS,
+  AI_DECISIONING_GANTT_LANE_LEGEND,
   AI_DECISIONING_STUDIO_TIMELINE_WEEKS,
   ENTERPRISE_PLATINUM_TIMELINE_COLUMNS,
   IGNITE_GOLD_COLUMNS_PER_MONTH,
@@ -875,8 +876,14 @@ function adsCustomerRolesFootnoteArrow(rowIndex: number): ReactNode {
   return null;
 }
 
-/** Grid lines for AI Decisioning Customer Roles table (matches Braze resource tables). */
-const ADS_ROLES_TABLE_CELL = "border border-[#E8E5F8]";
+/** Customer Roles table uses `border-separate` so the arrow column can omit horizontal rules only. */
+const ADS_ROLES_EDGE = "border-[#E8E5F8]";
+const ADS_ROLES_TH_1 = `border-l border-r border-t border-b ${ADS_ROLES_EDGE} bg-[#faf8ff]`;
+const ADS_ROLES_TH_MID = `border-r border-t border-b ${ADS_ROLES_EDGE} border-l-0 bg-[#faf8ff]`;
+const ADS_ROLES_TH_LAST = `border-0 bg-white`;
+const ADS_ROLES_TD_1 = `border-l border-r border-b ${ADS_ROLES_EDGE} border-t-0 bg-white`;
+const ADS_ROLES_TD_MID = `border-r border-b ${ADS_ROLES_EDGE} border-l-0 border-t-0 bg-white`;
+const ADS_ROLES_TD_LAST = `border-0 bg-white`;
 
 function AdsCustomerRolesChart() {
   const footnote = (
@@ -893,7 +900,7 @@ function AdsCustomerRolesChart() {
       </h3>
       <div className="mt-6 flex flex-col gap-6 lg:flex-row lg:items-center lg:gap-3">
         <div className="min-w-0 flex-1 overflow-x-auto">
-          <table className="w-full min-w-[min(100%,780px)] table-fixed border-collapse text-left text-base text-[#2F2354]">
+          <table className="w-full min-w-[min(100%,780px)] table-fixed border-separate border-spacing-0 text-left text-base text-[#2F2354]">
             <colgroup>
               <col style={{ width: "18%" }} />
               <col />
@@ -901,29 +908,29 @@ function AdsCustomerRolesChart() {
               <col style={{ width: "11rem" }} />
             </colgroup>
             <thead>
-              <tr className="bg-[#faf8ff]">
+              <tr className="align-top">
                 <th
-                  className={`${ADS_ROLES_TABLE_CELL} px-3 py-3.5 text-[18px] font-semibold text-[#2c1650] sm:px-4`}
+                  className={`${ADS_ROLES_TH_1} px-3 py-3.5 text-[18px] font-semibold text-[#2c1650] sm:px-4`}
                 >
                   Role Persona*
                 </th>
                 <th
-                  className={`${ADS_ROLES_TABLE_CELL} px-3 py-3.5 text-[18px] font-semibold text-[#2c1650] sm:px-4`}
+                  className={`${ADS_ROLES_TH_MID} px-3 py-3.5 text-[18px] font-semibold text-[#2c1650] sm:px-4`}
                 >
                   Responsibilities During Setup
                 </th>
                 <th
-                  className={`${ADS_ROLES_TABLE_CELL} px-3 py-3.5 text-[17px] font-semibold leading-tight text-[#2c1650] sm:px-4`}
+                  className={`${ADS_ROLES_TH_MID} px-3 py-3.5 text-[17px] font-semibold leading-tight text-[#2c1650] sm:px-4`}
                 >
                   Commitment During Implementation
                 </th>
                 <th
-                  className={`${ADS_ROLES_TABLE_CELL} px-3 py-3.5 text-[17px] font-semibold leading-tight text-[#2c1650] sm:px-4`}
+                  className={`${ADS_ROLES_TH_MID} px-3 py-3.5 text-[17px] font-semibold leading-tight text-[#2c1650] sm:px-4`}
                 >
                   Commitment After Launch
                 </th>
                 <th
-                  className={`${ADS_ROLES_TABLE_CELL} hidden w-14 py-3.5 pl-0 pr-0 text-center lg:table-cell`}
+                  className={`${ADS_ROLES_TH_LAST} hidden w-14 py-3.5 pl-0 pr-0 text-center lg:table-cell`}
                   aria-hidden
                 />
               </tr>
@@ -931,13 +938,13 @@ function AdsCustomerRolesChart() {
             <tbody>
               {ADS_CUSTOMER_ROLES_CHART_ROWS.map((row, rowIndex) => (
                 <tr key={row.name} className="align-top">
-                  <td className={`${ADS_ROLES_TABLE_CELL} px-3 py-3.5 sm:px-4`}>
+                  <td className={`${ADS_ROLES_TD_1} px-3 py-3.5 sm:px-4`}>
                     <span className="font-semibold text-[#300266]">{row.name}</span>
                     <span className="mt-0.5 block text-[17px] font-normal text-[#5c4a7a]">
                       {row.title}
                     </span>
                   </td>
-                  <td className={`${ADS_ROLES_TABLE_CELL} px-3 py-3.5 sm:px-4`}>
+                  <td className={`${ADS_ROLES_TD_MID} px-3 py-3.5 sm:px-4`}>
                     <ul className="space-y-1.5">
                       {row.bullets.map((line) => (
                         <li key={line} className="flex gap-2 leading-relaxed">
@@ -953,25 +960,27 @@ function AdsCustomerRolesChart() {
                   {row.mergeCommitmentColumns ? (
                     <td
                       colSpan={2}
-                      className={`${ADS_ROLES_TABLE_CELL} px-3 py-3.5 align-top text-[17px] leading-snug text-[#2F2354] sm:px-4`}
+                      className={`${ADS_ROLES_TD_MID} px-3 py-3.5 align-top text-[17px] leading-snug text-[#2F2354] sm:px-4`}
                     >
                       <span className="block min-w-0 break-words">{row.commitmentDuring}</span>
                     </td>
                   ) : (
                     <>
                       <td
-                        className={`${ADS_ROLES_TABLE_CELL} px-3 py-3.5 align-top text-[17px] leading-snug text-[#2F2354] sm:px-4`}
+                        className={`${ADS_ROLES_TD_MID} px-3 py-3.5 align-top text-[17px] leading-snug text-[#2F2354] sm:px-4`}
                       >
                         <span className="block min-w-0 break-words">{row.commitmentDuring}</span>
                       </td>
                       <td
-                        className={`${ADS_ROLES_TABLE_CELL} px-3 py-3.5 align-top text-[17px] leading-snug text-[#2F2354] sm:px-4`}
+                        className={`${ADS_ROLES_TD_MID} px-3 py-3.5 align-top text-[17px] leading-snug text-[#2F2354] sm:px-4`}
                       >
                         <span className="block min-w-0 break-words">{row.commitmentAfter}</span>
                       </td>
                     </>
                   )}
-                  <td className={`${ADS_ROLES_TABLE_CELL} hidden align-middle lg:table-cell lg:w-14 lg:p-0`}>
+                  <td
+                    className={`${ADS_ROLES_TD_LAST} hidden align-middle lg:table-cell lg:w-14 lg:p-0`}
+                  >
                     <div className="flex min-h-[2.875rem] items-center justify-end py-1 pl-0 pr-0 lg:justify-end">
                       {adsCustomerRolesFootnoteArrow(rowIndex)}
                     </div>
@@ -1017,6 +1026,9 @@ export function CanvasBoard({ config, tiles = [], readOnly = false }: Props) {
   const [brazeCoreView, setBrazeCoreView] = useState<"swimlane" | "gantt">("swimlane");
   /** Gantt-only filter: default unchecked so the first Gantt view shows customer activities/milestones. */
   const [showOnboardingSessionsInGantt, setShowOnboardingSessionsInGantt] = useState(false);
+  /** AI Decisioning Studio: swimlane vs Gantt (Gantt defaults to customer activities only until checkbox). */
+  const [adsCanvasView, setAdsCanvasView] = useState<"swimlane" | "gantt">("swimlane");
+  const [showAdsOnboardingSessionsInGantt, setShowAdsOnboardingSessionsInGantt] = useState(false);
   const timelineRef = useRef<HTMLDivElement | null>(null);
   /** Measured rail width for drag math only — must NOT drive React state (ResizeObserver + heavy ADS tiles froze the tab). */
   const timelineWidthRef = useRef(1200);
@@ -1189,7 +1201,7 @@ export function CanvasBoard({ config, tiles = [], readOnly = false }: Props) {
       cancelAnimationFrame(raf);
       observer.disconnect();
     };
-  }, [brazeCoreView]);
+  }, [brazeCoreView, adsCanvasView]);
 
   const serverNotesByUid = useMemo(
     () => new Map(tiles.map((t) => [tileStableKey(t), t.Notes ?? ""])),
@@ -1422,6 +1434,40 @@ export function CanvasBoard({ config, tiles = [], readOnly = false }: Props) {
     () => new Map(tiles.map((t) => [tileStableKey(t), t.Span_Weeks])),
     [tiles],
   );
+
+  const adsGanttSpanResize = useMemo((): BrazeCoreGanttSpanResizeProps | undefined => {
+    if (!isAiDecisioningStudio || readOnly) return undefined;
+    return {
+      planOptionId: config.planOptionId,
+      durationWeeks,
+      timelineColumns,
+      getTimelineWidthPx: () => timelineWidthRef.current,
+      templateSpanWeeksForTile: (t: TileRecord) =>
+        t.Tile_ID.startsWith("custom_")
+          ? 1
+          : (serverTemplateSpanByUid.get(tileStableKey(t)) ?? t.Span_Weeks),
+      onSpanChange: (t: TileRecord, span: number) => {
+        const uid = tileStableKey(t);
+        if (t.Span_Weeks === span) return;
+        setEditsByUid((c) => {
+          pushLayoutUndoSnapshot(layoutUndoStackRef, c);
+          return {
+            ...c,
+            [uid]: { ...c[uid], Span_Weeks: span },
+          };
+        });
+      },
+      spanResizeMode: "aiAdsChevron",
+      spanResizeHandleHeightPx: 32,
+    };
+  }, [
+    isAiDecisioningStudio,
+    readOnly,
+    config.planOptionId,
+    durationWeeks,
+    timelineColumns,
+    serverTemplateSpanByUid,
+  ]);
 
   const brazeCoreGanttSpanResize = useMemo((): BrazeCoreGanttSpanResizeProps | undefined => {
     if (isAiDecisioningStudio || readOnly) return undefined;
@@ -2245,7 +2291,9 @@ export function CanvasBoard({ config, tiles = [], readOnly = false }: Props) {
 
   const showAddTileToolbarButton =
     !readOnly &&
-    (isAiDecisioningStudio || (!isAiDecisioningStudio && brazeCoreView === "swimlane"));
+    (isAiDecisioningStudio
+      ? adsCanvasView === "swimlane"
+      : brazeCoreView === "swimlane");
 
   const addTileSquareButton = (
     <button
@@ -2261,11 +2309,35 @@ export function CanvasBoard({ config, tiles = [], readOnly = false }: Props) {
 
   return (
     <div className="relative">
-      {(showSaveToolbar || showBrazeViewToggle || (isAiDecisioningStudio && !readOnly)) && (
+      {(showSaveToolbar || showBrazeViewToggle || isAiDecisioningStudio) && (
         <div className="mb-3 flex min-h-[2.5rem] items-center justify-between gap-3">
           <div className="flex min-w-0 flex-wrap items-center gap-3">
-            {isAiDecisioningStudio && !readOnly ? (
-              addTileSquareButton
+            {isAiDecisioningStudio ? (
+              <div className="flex flex-wrap items-center gap-3">
+                {!readOnly && adsCanvasView === "swimlane" ? addTileSquareButton : null}
+                <button
+                  type="button"
+                  onClick={() =>
+                    setAdsCanvasView((v) => (v === "swimlane" ? "gantt" : "swimlane"))
+                  }
+                  className="shrink-0 rounded-md border border-[#801ED7] bg-white px-4 py-2 text-sm font-semibold text-[#801ED7] shadow-sm transition hover:bg-[#f6efff]"
+                >
+                  {adsCanvasView === "swimlane"
+                    ? "View Gantt Chart"
+                    : "View Swimlane Timeline"}
+                </button>
+                {adsCanvasView === "gantt" ? (
+                  <label className="inline-flex select-none items-center gap-2 text-sm font-medium text-[#300266]">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-[#c9c4ef] text-[#801ED7] focus:ring-[#801ED7]"
+                      checked={showAdsOnboardingSessionsInGantt}
+                      onChange={(e) => setShowAdsOnboardingSessionsInGantt(e.target.checked)}
+                    />
+                    Show onboarding sessions
+                  </label>
+                ) : null}
+              </div>
             ) : showBrazeViewToggle ? (
               <div className="flex flex-wrap items-center gap-3">
                 <button
@@ -2318,7 +2390,54 @@ export function CanvasBoard({ config, tiles = [], readOnly = false }: Props) {
       <div className="rounded-xl border border-[#C9C4EF] bg-white shadow-sm">
         <div className="w-full">
           {isAiDecisioningStudio ? (
-            renderReadOnly ? (
+            adsCanvasView === "gantt" ? (
+              <div className="px-2 py-4 sm:px-4">
+                {renderReadOnly ? (
+                  <BrazeCoreGanttChart
+                    tiles={visibleTileState}
+                    showOnboardingSessions={showAdsOnboardingSessionsInGantt}
+                    planOptionId={config.planOptionId}
+                    durationWeeks={durationWeeks}
+                    timelineColumns={timelineColumns}
+                    timelineConfig={timelineConfig}
+                    showMonthsRow={showMonthsRow}
+                    showWeeksRow={showWeeksRow}
+                    phaseGridSpans={phaseGridSpans}
+                    monthGridSpans={monthGridSpans}
+                    onOpenTile={setSelectedTile}
+                    readOnly
+                    timelineRailRef={timelineRef}
+                    laneLegend={AI_DECISIONING_GANTT_LANE_LEGEND}
+                    matchAiDecisioningSwimlaneBars
+                  />
+                ) : (
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={adsCollisionDetection}
+                    onDragEnd={handleDragEnd}
+                  >
+                    <BrazeCoreGanttChart
+                      tiles={visibleTileState}
+                      showOnboardingSessions={showAdsOnboardingSessionsInGantt}
+                      planOptionId={config.planOptionId}
+                      durationWeeks={durationWeeks}
+                      timelineColumns={timelineColumns}
+                      timelineConfig={timelineConfig}
+                      showMonthsRow={showMonthsRow}
+                      showWeeksRow={showWeeksRow}
+                      phaseGridSpans={phaseGridSpans}
+                      monthGridSpans={monthGridSpans}
+                      onOpenTile={setSelectedTile}
+                      readOnly={false}
+                      timelineRailRef={timelineRef}
+                      spanResize={adsGanttSpanResize}
+                      laneLegend={AI_DECISIONING_GANTT_LANE_LEGEND}
+                      matchAiDecisioningSwimlaneBars
+                    />
+                  </DndContext>
+                )}
+              </div>
+            ) : renderReadOnly ? (
               adsBoardBody
             ) : (
               <DndContext
@@ -2444,7 +2563,7 @@ export function CanvasBoard({ config, tiles = [], readOnly = false }: Props) {
         </div>
       </div>
       {saveError && <p className="mt-2 text-sm text-[#cf3a50]">{saveError}</p>}
-      {(isAiDecisioningStudio || brazeCoreView !== "gantt") && (
+      {(isAiDecisioningStudio ? adsCanvasView !== "gantt" : brazeCoreView !== "gantt") && (
       <div
         className={clsx(
           "rounded-xl border border-[#E8E5F8] bg-white px-4 py-3 text-[#4c3b78]",
