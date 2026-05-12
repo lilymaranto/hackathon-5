@@ -1,0 +1,16 @@
+.DS_Store
+*.pem
+
+# Next.js app
+onboarding-canvas/node_modules/
+onboarding-canvas/.next/
+onboarding-canvas/out/
+onboarding-canvas/.vercel/
+onboarding-canvas/.env*
+onboarding-canvas/*.tsbuildinfo
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
