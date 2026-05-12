@@ -26,8 +26,11 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async signIn({ profile }) {
-      const email = profile?.email?.toLowerCase();
+    async signIn({ user, profile }) {
+      // OAuth: `user` is the normalized profile from the provider; `profile` is the raw OIDC/userinfo payload.
+      // Prefer `user.email` — raw `profile.email` is sometimes absent even when sign-in succeeded.
+      const raw = profile as { email?: string | null } | undefined;
+      const email = (user?.email ?? raw?.email)?.toLowerCase();
       return !!email && email.endsWith("@braze.com");
     },
     async redirect({ url, baseUrl }) {
