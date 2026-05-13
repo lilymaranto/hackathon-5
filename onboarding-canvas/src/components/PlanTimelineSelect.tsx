@@ -11,10 +11,12 @@ type Props = {
   onChange: (id: PlanOptionId) => void;
   /** Matches surrounding form controls (`md` = create panel, `sm` = edit form). */
   size?: "md" | "sm";
+  /** Tighter padding / icon (~10% smaller) for dense panels (e.g. create config drawer). */
+  compact?: boolean;
   disabled?: boolean;
 };
 
-export function PlanTimelineSelect({ value, onChange, size = "md", disabled }: Props) {
+export function PlanTimelineSelect({ value, onChange, size = "md", compact = false, disabled }: Props) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -38,10 +40,19 @@ export function PlanTimelineSelect({ value, onChange, size = "md", disabled }: P
 
   const triggerClasses =
     size === "sm"
-      ? "px-3 py-2 text-sm font-normal"
+      ? compact
+        ? "px-[11px] py-[7px] text-sm font-normal"
+        : "px-3 py-2 text-sm font-normal"
       : "px-4 py-2.5 text-base";
 
-  const optionRowClasses = size === "sm" ? "px-3 py-2 text-sm" : "px-4 py-2.5 text-base";
+  const optionRowClasses =
+    size === "sm"
+      ? compact
+        ? "px-[11px] py-[7px] text-sm"
+        : "px-3 py-2 text-sm"
+      : "px-4 py-2.5 text-base";
+
+  const chevronSize = size === "sm" ? (compact ? 14 : 16) : 18;
 
   return (
     <div ref={rootRef} className="relative w-full">
@@ -53,12 +64,13 @@ export function PlanTimelineSelect({ value, onChange, size = "md", disabled }: P
         onClick={() => !disabled && setOpen((o) => !o)}
         className={clsx(
           "flex w-full items-center justify-between gap-2 rounded-lg border border-[#d4c9f6] bg-white text-left outline-none focus:border-[#8b30e7] disabled:cursor-not-allowed disabled:opacity-60",
+          compact && size === "sm" && "rounded-md",
           triggerClasses,
         )}
       >
         <span className="min-w-0 truncate">{labelForPlanOption(value)}</span>
         <ChevronDown
-          size={size === "sm" ? 16 : 18}
+          size={chevronSize}
           strokeWidth={2}
           className={clsx("shrink-0 text-[#5f478f] opacity-70 transition-transform", open && "rotate-180")}
           aria-hidden
@@ -67,7 +79,10 @@ export function PlanTimelineSelect({ value, onChange, size = "md", disabled }: P
       {open && (
         <ul
           role="listbox"
-          className="absolute left-0 right-0 top-full z-[60] mt-1 max-h-72 overflow-y-auto rounded-lg border border-[#d4c9f6] bg-white py-1 shadow-lg"
+          className={clsx(
+            "absolute left-0 right-0 top-full z-[60] max-h-72 overflow-y-auto rounded-lg border border-[#d4c9f6] bg-white shadow-lg",
+            compact ? "mt-[3px] py-[3px]" : "mt-1 py-1",
+          )}
         >
           {BRAZE_CORE_PLAN_OPTIONS.map((opt) => (
             <li key={opt.id} role="presentation">

@@ -107,45 +107,45 @@ export function ConfigCreateForm() {
       />
       <aside
         className={clsx(
-          "fixed right-0 top-0 z-50 h-full w-full max-w-xl border-l border-[#d9ccff] bg-[#fcfbff] p-7 shadow-2xl transition-transform",
+          "fixed right-0 top-0 z-50 h-full w-full max-w-xl overflow-y-auto border-l border-[#d9ccff] bg-[#fcfbff] p-[1.575rem] shadow-2xl transition-transform",
           open ? "translate-x-0" : "translate-x-full",
         )}
       >
-        <div className="mb-5 flex items-center justify-between gap-3">
+        <div className="mb-[1.125rem] flex items-center justify-between gap-[0.675rem]">
           <div>
-            <h2 className="text-2xl font-semibold text-[#2c1650]">Create Configuration</h2>
-            <p className="mt-1 text-base text-[#6b5798]">Set up account details and seed timeline.</p>
+            <h2 className="text-[22px] font-semibold leading-tight text-[#2c1650]">Create Configuration</h2>
+            <p className="mt-1 text-[14px] text-[#6b5798]">Set up account details and seed timeline.</p>
           </div>
           <button
             type="button"
             title="Close panel"
             aria-label="Close create configuration panel"
             onClick={() => setOpen(false)}
-            className="rounded-md border border-[#d4c9f6] p-2.5 text-[#5f478f] hover:bg-[#f5efff]"
+            className="rounded-md border border-[#d4c9f6] p-[9px] text-[#5f478f] hover:bg-[#f5efff]"
           >
-            <X size={20} strokeWidth={2} />
+            <X size={18} strokeWidth={2} />
           </button>
         </div>
-        <form onSubmit={onSubmit} className="space-y-5">
+        <form onSubmit={onSubmit} className="space-y-[1.125rem]">
           <div>
-            <label className="mb-1.5 block text-base font-semibold text-[#2c1650]">
+            <label className="mb-[5px] block text-[14px] font-semibold text-[#2c1650]">
               Account Title <span className="text-[#cf3a50]">*</span>
             </label>
             <input
-              className="w-full rounded-lg border border-[#d4c9f6] bg-white px-4 py-2.5 text-base outline-none focus:border-[#8b30e7]"
+              className="w-full rounded-md border border-[#d4c9f6] bg-white px-[0.9rem] py-[9px] text-[14px] outline-none focus:border-[#8b30e7]"
               placeholder="e.g., Nike"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
             />
           </div>
 
-          <div className={clsx("grid gap-5", !isAiDecisioningStudio && "md:grid-cols-2")}>
+          <div className={clsx("grid gap-[1.125rem]", !isAiDecisioningStudio && "md:grid-cols-2")}>
             <div>
-              <label className="mb-1.5 block text-base font-semibold text-[#2c1650]">
+              <label className="mb-[5px] block text-[14px] font-semibold text-[#2c1650]">
                 Braze Product <span className="text-[#cf3a50]">*</span>
               </label>
               <select
-                className="w-full rounded-lg border border-[#d4c9f6] bg-white px-4 py-2.5 text-base outline-none focus:border-[#8b30e7]"
+                className="w-full rounded-md border border-[#d4c9f6] bg-white px-[0.9rem] py-[9px] text-[14px] outline-none focus:border-[#8b30e7]"
                 value={productType}
                 onChange={(event) => setProductType(event.target.value as ProductType)}
               >
@@ -159,20 +159,25 @@ export function ConfigCreateForm() {
 
             {!isAiDecisioningStudio && (
               <div>
-                <label className="mb-1.5 block text-base font-semibold text-[#2c1650]">
+                <label className="mb-[5px] block text-[14px] font-semibold text-[#2c1650]">
                   Plan Package <span className="text-[#cf3a50]">*</span>
                 </label>
-                <PlanTimelineSelect value={planOptionId} onChange={setPlanOptionId} size="md" />
+                <PlanTimelineSelect
+                  value={planOptionId}
+                  onChange={setPlanOptionId}
+                  size="sm"
+                  compact
+                />
               </div>
             )}
           </div>
 
           <div>
-            <label className="mb-1.5 block text-base font-semibold text-[#2c1650]">
+            <label className="mb-[5px] block text-[14px] font-semibold text-[#2c1650]">
               Industry <span className="text-[#cf3a50]">*</span>
             </label>
             <select
-              className="w-full rounded-lg border border-[#d4c9f6] bg-white px-4 py-2.5 text-base outline-none focus:border-[#8b30e7]"
+              className="w-full rounded-md border border-[#d4c9f6] bg-white px-[0.9rem] py-[9px] text-[14px] outline-none focus:border-[#8b30e7]"
               value={industry}
               onChange={(event) => setIndustry(event.target.value as IndustryType)}
             >
@@ -184,42 +189,42 @@ export function ConfigCreateForm() {
             </select>
           </div>
 
-          <fieldset className="rounded-lg border border-[#e8dff9] bg-[#faf8ff] p-4">
-            <legend className="px-1 text-base font-semibold text-[#2c1650]">Channels</legend>
-            <div className="flex flex-col gap-3">
-              <label className="flex cursor-pointer items-center gap-3 text-base text-[#2c1650]">
+          <fieldset className="rounded-md border border-[#e8dff9] bg-[#faf8ff] p-[0.9rem]">
+            <legend className="px-1 text-[14px] font-semibold text-[#2c1650]">Channels</legend>
+            <div className="flex flex-col gap-[0.675rem]">
+              <label className="flex cursor-pointer items-center gap-[0.675rem] text-[14px] text-[#2c1650]">
                 <input
                   type="checkbox"
                   checked={channelEmail}
                   onChange={(e) => setChannelEmail(e.target.checked)}
-                  className="h-[18px] w-[18px] rounded border-[#c4b8e8] accent-[#801ED7]"
+                  className="h-4 w-4 rounded border-[#c4b8e8] accent-[#801ED7]"
                 />
                 Email
               </label>
-              <label className="flex cursor-pointer items-center gap-3 text-base text-[#2c1650]">
+              <label className="flex cursor-pointer items-center gap-[0.675rem] text-[14px] text-[#2c1650]">
                 <input
                   type="checkbox"
                   checked={channelSms}
                   onChange={(e) => setChannelSms(e.target.checked)}
-                  className="h-[18px] w-[18px] rounded border-[#c4b8e8] accent-[#801ED7]"
+                  className="h-4 w-4 rounded border-[#c4b8e8] accent-[#801ED7]"
                 />
                 SMS
               </label>
-              <label className="flex cursor-pointer items-center gap-3 text-base text-[#2c1650]">
+              <label className="flex cursor-pointer items-center gap-[0.675rem] text-[14px] text-[#2c1650]">
                 <input
                   type="checkbox"
                   checked={channelWhatsapp}
                   onChange={(e) => setChannelWhatsapp(e.target.checked)}
-                  className="h-[18px] w-[18px] rounded border-[#c4b8e8] accent-[#801ED7]"
+                  className="h-4 w-4 rounded border-[#c4b8e8] accent-[#801ED7]"
                 />
                 WhatsApp
               </label>
-              <label className="flex cursor-pointer items-center gap-3 text-base text-[#2c1650]">
+              <label className="flex cursor-pointer items-center gap-[0.675rem] text-[14px] text-[#2c1650]">
                 <input
                   type="checkbox"
                   checked={channelInProduct}
                   onChange={(e) => setChannelInProduct(e.target.checked)}
-                  className="h-[18px] w-[18px] rounded border-[#c4b8e8] accent-[#801ED7]"
+                  className="h-4 w-4 rounded border-[#c4b8e8] accent-[#801ED7]"
                 />
                 In-product messaging
               </label>
@@ -227,10 +232,10 @@ export function ConfigCreateForm() {
           </fieldset>
 
           <div>
-            <label className="mb-1.5 block text-base font-semibold text-[#2c1650]">Password</label>
-            <div className="flex flex-wrap items-center gap-2">
+            <label className="mb-[5px] block text-[14px] font-semibold text-[#2c1650]">Password</label>
+            <div className="flex flex-wrap items-center gap-[7px]">
               <input
-                className="min-w-0 flex-1 rounded-lg border border-[#d4c9f6] bg-white px-4 py-2.5 text-base outline-none focus:border-[#8b30e7]"
+                className="min-w-0 flex-1 rounded-md border border-[#d4c9f6] bg-white px-[0.9rem] py-[9px] text-[14px] outline-none focus:border-[#8b30e7]"
                 placeholder="Max 8 chars"
                 value={password}
                 onChange={(event) => {
@@ -242,7 +247,7 @@ export function ConfigCreateForm() {
                 type="button"
                 title="Generate a random 8-character password"
                 aria-label="Generate a random 8-character password"
-                className="rounded-md bg-[#4a2b7a] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#3c2262]"
+                className="rounded-md bg-[#4a2b7a] px-[0.9rem] py-[9px] text-[12px] font-semibold text-white hover:bg-[#3c2262]"
                 onClick={() => {
                   setGenerated(true);
                   setPassword(generateRandomPassword(8));
@@ -256,11 +261,11 @@ export function ConfigCreateForm() {
                   title="Copy generated password to clipboard"
                   aria-label="Copy generated password to clipboard"
                   onClick={copyPassword}
-                  className="rounded-md border border-[#8b30e7] px-4 py-2.5 text-sm font-semibold text-[#8b30e7] hover:bg-[#f2e8ff]"
+                  className="rounded-md border border-[#8b30e7] px-[0.9rem] py-[9px] text-[12px] font-semibold text-[#8b30e7] hover:bg-[#f2e8ff]"
                 >
                   {copied ? (
-                    <span className="inline-flex items-center gap-1.5">
-                      <Check size={16} strokeWidth={2} />
+                    <span className="inline-flex items-center gap-1">
+                      <Check size={14} strokeWidth={2} />
                       Copied
                     </span>
                   ) : (
@@ -269,25 +274,25 @@ export function ConfigCreateForm() {
                 </button>
               )}
             </div>
-            <p className="mt-2 text-sm text-[#6b5798]">
+            <p className="mt-[7px] text-[12px] text-[#6b5798]">
               Optional. If left blank, password defaults to title in lowercase with no spaces.
             </p>
           </div>
 
-          {error && <p className="text-base text-[#cf3a50]">{error}</p>}
+          {error && <p className="text-[14px] text-[#cf3a50]">{error}</p>}
 
-          <div className="flex justify-end gap-3 pt-2">
+          <div className="flex justify-end gap-[0.675rem] pt-[7px]">
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="rounded-md border border-[#d4c9f6] px-5 py-2.5 text-base font-semibold text-[#4a2b7a]"
+              className="rounded-md border border-[#d4c9f6] px-[1.125rem] py-[9px] text-[14px] font-semibold text-[#4a2b7a]"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={!canSubmit || isSaving}
-              className="rounded-md bg-gradient-to-r from-[#8325db] to-[#f35f9c] px-5 py-2.5 text-base font-semibold text-white disabled:opacity-60"
+              className="rounded-md bg-gradient-to-r from-[#8325db] to-[#f35f9c] px-[1.125rem] py-[9px] text-[14px] font-semibold text-white disabled:opacity-60"
             >
               {isSaving ? "Creating..." : "Create Config"}
             </button>

@@ -24,6 +24,11 @@ import {
   getTimelineConfig,
   isWorkstreamVisibleForChannels,
 } from "@/lib/constants";
+import {
+  BRAZE_CORE_TILE_HEIGHT_PX,
+  GANTT_TASK_BAR_HEIGHT_PX,
+  scaleYpx,
+} from "@/lib/canvas-layout-y";
 import { getBrazeCoreResourceDrawerLinks } from "@/lib/braze-core-resources-data";
 import { getTileTimelineUnits } from "@/lib/timeline-units";
 import { ConfigRecord, PlanOptionId, TileCategory, TileRecord, Workstream } from "@/lib/types";
@@ -40,8 +45,9 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import clsx from "clsx";
-import { ArrowBigDown, GripVertical, Plus, Star } from "lucide-react";
+import { ArrowBigDown, ArrowLeft, Plus, Star } from "lucide-react";
 import { CSS } from "@dnd-kit/utilities";
+import Link from "next/link";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { useRouter } from "next/navigation";
@@ -58,6 +64,10 @@ type Props = {
   /** Defaults to [] so dependency arrays / logs never read undefined.length (Fast Refresh edge cases). */
   tiles?: TileRecord[];
   readOnly?: boolean;
+  /** When set, back control appears in the chart toolbar row, left of view toggle (e.g. `/employee/configs`). */
+  topToolbarBackHref?: string;
+  /** Plan heading shown centered in the chart toolbar row. */
+  topToolbarTitle?: string;
 };
 
 /** Stable row id for DnD/state (Caboodle **ID** column value = `{Config_ID}__{slug}`). */
@@ -81,27 +91,27 @@ function pushLayoutUndoSnapshot(stackRef: { current: LayoutEditsMap[] }, current
   while (stackRef.current.length > MAX_LAYOUT_UNDO) stackRef.current.shift();
 }
 
-const TILE_TOP_OFFSET = 10;
-const TILE_HEIGHT_PX = 40;
+const TILE_TOP_OFFSET = scaleYpx(10);
+const TILE_HEIGHT_PX = BRAZE_CORE_TILE_HEIGHT_PX;
 
 /** AI Decisioning Studio chevron lane tiles (~3× legacy height; fits up to 3 lines of label). */
-const ADS_CHEVRON_TILE_HEIGHT_PX = 108;
-const ADS_CHEVRON_TOP_OFFSET_PX = 8;
-const TILE_LANE_GAP = 8;
+const ADS_CHEVRON_TILE_HEIGHT_PX = scaleYpx(108);
+const ADS_CHEVRON_TOP_OFFSET_PX = scaleYpx(8);
+const TILE_LANE_GAP = scaleYpx(8);
 /**
  * When two same-category chevrons interlock, pull them slightly apart horizontally so the canvas
  * shows through as a gap (reference: chevron tips + notch stay visible; avoids a flat vertical bar).
  */
-const ADS_CHEVRON_SAME_FILL_GAP_PX = 3;
+const ADS_CHEVRON_SAME_FILL_GAP_PX = scaleYpx(3);
 
 /**
  * Target horizontal depth (px) for the right-hand tip / left receiver notch when the tile is wide
  * enough. Narrow tiles cap this with {@link adsEffectiveLaneNotchPx} so the polygon stays valid.
  */
-const ADS_LANE_NOTCH_PX = 24;
+const ADS_LANE_NOTCH_PX = scaleYpx(24);
 /** Do not let the notch consume more than this fraction of a tile's width (avoids collapsed tips). */
 const ADS_LANE_NOTCH_MAX_WIDTH_FRAC = 0.24;
-const ADS_LANE_NOTCH_MIN_PX = 8;
+const ADS_LANE_NOTCH_MIN_PX = scaleYpx(8);
 /**
  * Vertical inset (% of tile height) before the diagonal runs to the tip. Larger = shorter diagonal =
  * visibly pointier apex without increasing n (pairs with capped n on narrow spans).
@@ -131,27 +141,27 @@ function adsEffectiveLaneNotchPx(tileWidthPx: number): number {
 }
 
 /** Estimated milestone pill height for bottom stacking (excludes caret below box). */
-const ADS_MILESTONE_CARD_STACK_PX = 52;
-const ADS_MILESTONE_BOTTOM_GAP_PX = 8;
+const ADS_MILESTONE_CARD_STACK_PX = scaleYpx(51);
+const ADS_MILESTONE_BOTTOM_GAP_PX = scaleYpx(7);
 /** Keeps top-band milestones snug to the chevron row below. */
-const ADS_MILESTONE_BAND_BOTTOM_PADDING_PX = 3;
+const ADS_MILESTONE_BAND_BOTTOM_PADDING_PX = scaleYpx(2);
 /** Space reserved below downward carets before the track (smaller = milestones sit closer). */
-const ADS_MILESTONE_CARET_OVERFLOW_PX = 7;
+const ADS_MILESTONE_CARET_OVERFLOW_PX = scaleYpx(6);
 /**
  * Pushes Go-live (random) below the anchor bar: upward caret (~10px) + small gap so it doesn’t
  * overlap the chevron clip-path.
  */
-const ADS_GOLIVE_RANDOM_CLEARANCE_BELOW_ANCHOR_PX = 20;
+const ADS_GOLIVE_RANDOM_CLEARANCE_BELOW_ANCHOR_PX = scaleYpx(20);
 /**
  * Symmetric inset for default layout: gap from Go-live (trained) caret → chevron bar matches gap from
  * Go-live (random) pill bottom → lane bottom (see {@link ADS_MS_GOLIVE_RANDOM_BODY_PX}).
  */
-const ADS_MS_GOLIVE_EDGE_GUTTER_PX = 16;
+const ADS_MS_GOLIVE_EDGE_GUTTER_PX = scaleYpx(16);
 /**
  * Approx. distance from `top` of below-bar Go-live (random) to bottom of its pill (caret-on-top,
  * typical title length). Increase if the pill clips at the bottom.
  */
-const ADS_MS_GOLIVE_RANDOM_BODY_PX = 72;
+const ADS_MS_GOLIVE_RANDOM_BODY_PX = scaleYpx(72);
 
 function adsInterlockingClipPath(attachLeft: boolean, nPx: number): string {
   const n = Math.round(Math.max(ADS_LANE_NOTCH_MIN_PX, nPx));
@@ -384,9 +394,12 @@ function DraggableTile({
       ref={setNodeRef}
       onClick={() => onOpen(tile)}
       className={clsx(
-        "absolute flex h-10 items-center justify-center overflow-hidden rounded-md px-1.5 py-1 text-center text-[12px] leading-tight shadow-sm",
+        "absolute flex h-7 items-center justify-center overflow-hidden rounded-md text-center leading-tight shadow-sm",
         tile.Category === "milestone"
-          ? "z-[18] border-2 border-white bg-white shadow-sm"
+          ? "z-[18] gap-1 border-2 border-white bg-white px-1 py-0.5 text-[8px] shadow-sm"
+          : "px-1.5 py-1 text-[9px]",
+        tile.Category === "milestone"
+          ? ""
           : clsx("border", tileClass(tile.Category)),
         !readOnly && tile.Category !== "milestone" && "cursor-grab active:cursor-grabbing",
         isDragging && "z-20 opacity-80",
@@ -400,14 +413,14 @@ function DraggableTile({
     >
       {tile.Category === "milestone" ? (
         <span
-          className="inline-flex items-center justify-center gap-1.5"
+          className="inline-flex items-center justify-center gap-1"
           style={{ color: BRAZE_CORE_SWIMLANE_MILESTONE_ACCENT }}
         >
           <Star
             fill={BRAZE_CORE_SWIMLANE_MILESTONE_ACCENT}
             color={BRAZE_CORE_SWIMLANE_MILESTONE_ACCENT}
             stroke={BRAZE_CORE_SWIMLANE_MILESTONE_ACCENT}
-            size={18}
+            size={17}
             aria-hidden
           />
           <span
@@ -423,18 +436,16 @@ function DraggableTile({
           </span>
         </span>
       ) : (
-        <span className="inline-flex max-w-full items-center gap-1">
-          {!readOnly && <GripVertical size={12} className="opacity-70" />}
-          <span
-            style={{
-              display: "-webkit-box",
-              WebkitBoxOrient: "vertical",
-              WebkitLineClamp: 2,
-              overflow: "hidden",
-            }}
-          >
-            {tile.Title}
-          </span>
+        <span
+          className="max-w-full"
+          style={{
+            display: "-webkit-box",
+            WebkitBoxOrient: "vertical",
+            WebkitLineClamp: 2,
+            overflow: "hidden",
+          }}
+        >
+          {tile.Title}
         </span>
       )}
     </button>
@@ -454,23 +465,24 @@ function StaticTile({
     <button
       onClick={() => onOpen(tile)}
       className={clsx(
-        "absolute flex h-10 items-center justify-center overflow-hidden rounded-md px-1.5 py-1 text-center text-[12px] leading-tight shadow-sm",
+        "absolute flex h-7 items-center justify-center overflow-hidden rounded-md text-center leading-tight shadow-sm",
         tile.Category === "milestone"
-          ? "z-[18] border-2 border-white bg-white shadow-sm"
-          : clsx("border", tileClass(tile.Category)),
+          ? "z-[18] gap-1 border-2 border-white bg-white px-1 py-0.5 text-[8px] shadow-sm"
+          : "px-1.5 py-1 text-[9px]",
+        tile.Category === "milestone" ? "" : clsx("border", tileClass(tile.Category)),
       )}
       style={style}
     >
       {tile.Category === "milestone" ? (
         <span
-          className="inline-flex items-center justify-center gap-1.5"
+          className="inline-flex items-center justify-center gap-1"
           style={{ color: BRAZE_CORE_SWIMLANE_MILESTONE_ACCENT }}
         >
           <Star
             fill={BRAZE_CORE_SWIMLANE_MILESTONE_ACCENT}
             color={BRAZE_CORE_SWIMLANE_MILESTONE_ACCENT}
             stroke={BRAZE_CORE_SWIMLANE_MILESTONE_ACCENT}
-            size={18}
+            size={17}
             aria-hidden
           />
           <span
@@ -552,10 +564,9 @@ function DraggableAdsChevronTile({
       {...listeners}
       {...attributes}
     >
-      <span className="inline-flex w-[90%] max-w-[90%] items-center justify-center gap-1.5">
-        {!readOnly && <GripVertical size={18} className="shrink-0 opacity-70" aria-hidden />}
+      <span className="inline-flex w-[90%] max-w-[90%] items-center justify-center">
         <span
-          className="min-w-0 flex-1 text-center text-[20px] font-medium leading-snug"
+          className="min-w-0 flex-1 text-center text-[18px] font-medium leading-snug"
           style={{
             display: "-webkit-box",
             WebkitBoxOrient: "vertical",
@@ -601,7 +612,7 @@ function StaticAdsChevronTile({
       }}
     >
       <span
-        className="w-[90%] max-w-[90%] text-center text-[20px] font-medium leading-snug"
+        className="w-[90%] max-w-[90%] text-center text-[18px] font-medium leading-snug"
         style={{
           display: "-webkit-box",
           WebkitBoxOrient: "vertical",
@@ -644,7 +655,7 @@ function DraggableAdsMilestoneTile({
       title="Key milestone — drag to reposition week"
       onClick={() => onOpen(tile)}
       className={clsx(
-        "absolute z-[45] flex max-w-[min(240px,46vw)] items-start gap-2 rounded-lg border-2 border-white bg-white px-3 py-2 text-left text-[17px] font-semibold leading-snug shadow-lg outline-none",
+        "absolute z-[45] flex max-w-[min(240px,46vw)] items-start gap-1.5 rounded-lg border-2 border-white bg-white px-2.5 py-1.5 text-left text-[14px] font-semibold leading-snug shadow-lg outline-none",
         adsFloatingMilestoneCaretClass(caretOnTop),
         !readOnly && "cursor-grab active:cursor-grabbing",
         isDragging && "z-[55] opacity-95",
@@ -659,7 +670,7 @@ function DraggableAdsMilestoneTile({
       {...attributes}
     >
       <Star
-        size={21}
+        size={18}
         className="mt-0.5 shrink-0"
         style={{ color: accentColor }}
         fill={accentColor}
@@ -700,7 +711,7 @@ function StaticAdsMilestoneTile({
       title="Key milestone"
       onClick={() => onOpen(tile)}
       className={clsx(
-        "absolute z-[45] flex max-w-[min(240px,46vw)] items-start gap-2 rounded-lg border-2 border-white bg-white px-3 py-2 text-left text-[17px] font-semibold leading-snug shadow-lg outline-none",
+        "absolute z-[45] flex max-w-[min(240px,46vw)] items-start gap-1.5 rounded-lg border-2 border-white bg-white px-2.5 py-1.5 text-left text-[14px] font-semibold leading-snug shadow-lg outline-none",
         adsFloatingMilestoneCaretClass(caretOnTop),
       )}
       style={{
@@ -710,7 +721,7 @@ function StaticAdsMilestoneTile({
       }}
     >
       <Star
-        size={21}
+        size={18}
         className="mt-0.5 shrink-0"
         style={{ color: accentColor }}
         fill={accentColor}
@@ -887,7 +898,7 @@ const ADS_ROLES_TD_LAST = `border-0 bg-white`;
 
 function AdsCustomerRolesChart() {
   const footnote = (
-    <p className="text-base italic leading-snug text-[#4c3b78]">
+    <p className="text-[14px] italic leading-snug text-[#4c3b78]">
       <span className="font-semibold not-italic text-[#801ED7]">*</span> Depending on the
       organization, these roles are often run by 1 individual
     </p>
@@ -900,7 +911,7 @@ function AdsCustomerRolesChart() {
       </h3>
       <div className="mt-6 flex flex-col gap-6 lg:flex-row lg:items-center lg:gap-3">
         <div className="min-w-0 flex-1 overflow-x-auto">
-          <table className="w-full min-w-[min(100%,780px)] table-fixed border-separate border-spacing-0 text-left text-base text-[#2F2354]">
+          <table className="w-full min-w-[min(100%,780px)] table-fixed border-separate border-spacing-0 text-left text-[14px] text-[#2F2354]">
             <colgroup>
               <col style={{ width: "18%" }} />
               <col />
@@ -910,22 +921,22 @@ function AdsCustomerRolesChart() {
             <thead>
               <tr className="align-top">
                 <th
-                  className={`${ADS_ROLES_TH_1} px-3 py-3.5 text-[18px] font-semibold text-[#2c1650] sm:px-4`}
+                  className={`${ADS_ROLES_TH_1} px-3 py-3.5 text-[16px] font-semibold text-[#2c1650] sm:px-4`}
                 >
                   Role Persona*
                 </th>
                 <th
-                  className={`${ADS_ROLES_TH_MID} px-3 py-3.5 text-[18px] font-semibold text-[#2c1650] sm:px-4`}
+                  className={`${ADS_ROLES_TH_MID} px-3 py-3.5 text-[16px] font-semibold text-[#2c1650] sm:px-4`}
                 >
                   Responsibilities During Setup
                 </th>
                 <th
-                  className={`${ADS_ROLES_TH_MID} px-3 py-3.5 text-[17px] font-semibold leading-tight text-[#2c1650] sm:px-4`}
+                  className={`${ADS_ROLES_TH_MID} px-3 py-3.5 text-[15px] font-semibold leading-tight text-[#2c1650] sm:px-4`}
                 >
                   Commitment During Implementation
                 </th>
                 <th
-                  className={`${ADS_ROLES_TH_MID} px-3 py-3.5 text-[17px] font-semibold leading-tight text-[#2c1650] sm:px-4`}
+                  className={`${ADS_ROLES_TH_MID} px-3 py-3.5 text-[15px] font-semibold leading-tight text-[#2c1650] sm:px-4`}
                 >
                   Commitment After Launch
                 </th>
@@ -940,7 +951,7 @@ function AdsCustomerRolesChart() {
                 <tr key={row.name} className="align-top">
                   <td className={`${ADS_ROLES_TD_1} px-3 py-3.5 sm:px-4`}>
                     <span className="font-semibold text-[#300266]">{row.name}</span>
-                    <span className="mt-0.5 block text-[17px] font-normal text-[#5c4a7a]">
+                    <span className="mt-0.5 block text-[15px] font-normal text-[#5c4a7a]">
                       {row.title}
                     </span>
                   </td>
@@ -960,19 +971,19 @@ function AdsCustomerRolesChart() {
                   {row.mergeCommitmentColumns ? (
                     <td
                       colSpan={2}
-                      className={`${ADS_ROLES_TD_MID} px-3 py-3.5 align-top text-[17px] leading-snug text-[#2F2354] sm:px-4`}
+                      className={`${ADS_ROLES_TD_MID} px-3 py-3.5 align-top text-[15px] leading-snug text-[#2F2354] sm:px-4`}
                     >
                       <span className="block min-w-0 break-words">{row.commitmentDuring}</span>
                     </td>
                   ) : (
                     <>
                       <td
-                        className={`${ADS_ROLES_TD_MID} px-3 py-3.5 align-top text-[17px] leading-snug text-[#2F2354] sm:px-4`}
+                        className={`${ADS_ROLES_TD_MID} px-3 py-3.5 align-top text-[15px] leading-snug text-[#2F2354] sm:px-4`}
                       >
                         <span className="block min-w-0 break-words">{row.commitmentDuring}</span>
                       </td>
                       <td
-                        className={`${ADS_ROLES_TD_MID} px-3 py-3.5 align-top text-[17px] leading-snug text-[#2F2354] sm:px-4`}
+                        className={`${ADS_ROLES_TD_MID} px-3 py-3.5 align-top text-[15px] leading-snug text-[#2F2354] sm:px-4`}
                       >
                         <span className="block min-w-0 break-words">{row.commitmentAfter}</span>
                       </td>
@@ -981,7 +992,7 @@ function AdsCustomerRolesChart() {
                   <td
                     className={`${ADS_ROLES_TD_LAST} hidden align-middle lg:table-cell lg:w-14 lg:p-0`}
                   >
-                    <div className="flex min-h-[2.875rem] items-center justify-end py-1 pl-0 pr-0 lg:justify-end">
+                    <div className="flex min-h-[2rem] items-center justify-end py-1 pl-0 pr-0 lg:justify-end">
                       {adsCustomerRolesFootnoteArrow(rowIndex)}
                     </div>
                   </td>
@@ -1003,7 +1014,13 @@ function AdsCustomerRolesChart() {
   );
 }
 
-export function CanvasBoard({ config, tiles = [], readOnly = false }: Props) {
+export function CanvasBoard({
+  config,
+  tiles = [],
+  readOnly = false,
+  topToolbarBackHref,
+  topToolbarTitle,
+}: Props) {
   const router = useRouter();
   const [isHydrated, setIsHydrated] = useState(false);
   const [selectedTile, setSelectedTile] = useState<TileRecord | null>(null);
@@ -1458,7 +1475,7 @@ export function CanvasBoard({ config, tiles = [], readOnly = false }: Props) {
         });
       },
       spanResizeMode: "aiAdsChevron",
-      spanResizeHandleHeightPx: 32,
+      spanResizeHandleHeightPx: GANTT_TASK_BAR_HEIGHT_PX,
     };
   }, [
     isAiDecisioningStudio,
@@ -1894,21 +1911,22 @@ export function CanvasBoard({ config, tiles = [], readOnly = false }: Props) {
       1,
       rowTilesWithLanes.reduce((maxLane, tile) => Math.max(maxLane, tile.lane + 1), 0),
     );
-    const rowHeight = Math.max(
-      92,
-      TILE_TOP_OFFSET * 2 + laneCount * TILE_HEIGHT_PX + (laneCount - 1) * TILE_LANE_GAP,
-    );
+    const contentRowHeight =
+      TILE_TOP_OFFSET * 2 + laneCount * TILE_HEIGHT_PX + (laneCount - 1) * TILE_LANE_GAP;
+    /** Single-lane rows used to inherit a tall `scaleYpx(92)` floor; keep multi-lane padding for overlaps. */
+    const rowMinFloor = laneCount <= 1 ? scaleYpx(52) : scaleYpx(92);
+    const rowHeight = Math.max(rowMinFloor, contentRowHeight);
 
     return (
       <div
         key={workstream.id}
-        className="grid grid-cols-[220px_1fr] border-b border-[#E8E5F8]"
+        className="grid grid-cols-[165px_1fr] border-b border-[#E8E5F8]"
       >
         <div
           className="flex items-center justify-center border-r border-[#E8E5F8] px-3 py-3 text-center"
           style={{ backgroundColor: workstream.color, minHeight: rowHeight }}
         >
-          <span className="w-full max-w-[160px] text-sm font-semibold leading-tight text-white drop-shadow-sm">
+          <span className="w-full max-w-[118px] text-[13px] font-semibold leading-tight text-white drop-shadow-sm">
             {workstream.label}
           </span>
         </div>
@@ -1972,6 +1990,7 @@ export function CanvasBoard({ config, tiles = [], readOnly = false }: Props) {
                         });
                       }}
                       heightClass="h-10"
+                      handleHeightPx={TILE_HEIGHT_PX}
                     />
                   )}
                 </div>
@@ -1998,7 +2017,7 @@ export function CanvasBoard({ config, tiles = [], readOnly = false }: Props) {
         {Array.from({ length: AI_DECISIONING_STUDIO_TIMELINE_WEEKS }, (_, index) => (
           <div
             key={index + 1}
-            className="border-l border-[#E8E5F8] px-2 py-3 text-center text-[16px] font-semibold text-[#6B5A9A]"
+            className="border-l border-[#E8E5F8] px-2 py-3 text-center text-[14px] font-semibold text-[#6B5A9A]"
           >
             W{index + 1}
           </div>
@@ -2050,7 +2069,7 @@ export function CanvasBoard({ config, tiles = [], readOnly = false }: Props) {
       const goliveCount = laneMilestoneLanes.filter(isAdsGoliveMilestone).length;
       const goliveExtra = goliveCount > 1 ? (goliveCount - 1) * adsMsLaneStridePx : 0;
       milestoneBandHeight = Math.max(
-        76,
+        scaleYpx(76),
         ADS_MILESTONE_CARET_OVERFLOW_PX +
           ADS_MILESTONE_BAND_BOTTOM_PADDING_PX +
           laneMsLaneCount * adsMsLaneStridePx +
@@ -2298,93 +2317,114 @@ export function CanvasBoard({ config, tiles = [], readOnly = false }: Props) {
   const addTileSquareButton = (
     <button
       type="button"
-      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-[#801ED7] text-white shadow-md transition hover:bg-[#6b18b8] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#801ED7]"
+      className="inline-flex h-[28px] min-w-[30px] shrink-0 items-center justify-center rounded border border-transparent bg-[#801ED7] px-2.5 py-0 leading-none text-white shadow-md transition hover:bg-[#6b18b8] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#801ED7]"
       aria-label="Add tile"
       title="Add a new tile (appears on the first row at the right of the timeline)"
       onClick={() => setAddTilePanelOpen(true)}
     >
-      <Plus size={22} strokeWidth={2.5} aria-hidden />
+      <Plus size={18} strokeWidth={2.75} aria-hidden className="shrink-0" />
     </button>
   );
 
   return (
     <div className="relative">
       {(showSaveToolbar || showBrazeViewToggle || isAiDecisioningStudio) && (
-        <div className="mb-3 flex min-h-[2.5rem] items-center justify-between gap-3">
-          <div className="flex min-w-0 flex-wrap items-center gap-3">
-            {isAiDecisioningStudio ? (
-              <div className="flex flex-wrap items-center gap-3">
-                {!readOnly && adsCanvasView === "swimlane" ? addTileSquareButton : null}
-                <button
-                  type="button"
-                  onClick={() =>
-                    setAdsCanvasView((v) => (v === "swimlane" ? "gantt" : "swimlane"))
-                  }
-                  className="shrink-0 rounded-md border border-[#801ED7] bg-white px-4 py-2 text-sm font-semibold text-[#801ED7] shadow-sm transition hover:bg-[#f6efff]"
+        <div className="mb-3 w-full">
+          <div className="relative flex min-h-[2rem] w-full items-center justify-between gap-2">
+            <div className="relative z-10 flex min-w-0 flex-wrap items-center gap-2">
+              {topToolbarBackHref ? (
+                <Link
+                  href={topToolbarBackHref}
+                  className="inline-flex shrink-0 rounded-md border border-[#d7ccf6] bg-white p-1.5 text-[#4c2b7f] shadow-sm transition hover:bg-[#f6efff]"
+                  aria-label="Back to all configs"
+                  title="Back to all configs"
                 >
-                  {adsCanvasView === "swimlane"
-                    ? "View Gantt Chart"
-                    : "View Swimlane Timeline"}
-                </button>
-                {adsCanvasView === "gantt" ? (
-                  <label className="inline-flex select-none items-center gap-2 text-sm font-medium text-[#300266]">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 rounded border-[#c9c4ef] text-[#801ED7] focus:ring-[#801ED7]"
-                      checked={showAdsOnboardingSessionsInGantt}
-                      onChange={(e) => setShowAdsOnboardingSessionsInGantt(e.target.checked)}
-                    />
-                    Show onboarding sessions
-                  </label>
-                ) : null}
-              </div>
-            ) : showBrazeViewToggle ? (
-              <div className="flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setBrazeCoreView((v) => (v === "swimlane" ? "gantt" : "swimlane"))
-                  }
-                  className="shrink-0 rounded-md border border-[#801ED7] bg-white px-4 py-2 text-sm font-semibold text-[#801ED7] shadow-sm transition hover:bg-[#f6efff]"
-                >
-                  {brazeCoreView === "swimlane"
-                    ? "View Gantt Chart"
-                    : "View Swimlane Timeline"}
-                </button>
-                {showAddTileToolbarButton ? addTileSquareButton : null}
-                {brazeCoreView === "gantt" ? (
-                  <label className="inline-flex select-none items-center gap-2 text-sm font-medium text-[#300266]">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 rounded border-[#c9c4ef] text-[#801ED7] focus:ring-[#801ED7]"
-                      checked={showOnboardingSessionsInGantt}
-                      onChange={(e) => setShowOnboardingSessionsInGantt(e.target.checked)}
-                    />
-                    Show onboarding sessions
-                  </label>
-                ) : null}
+                  <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden />
+                </Link>
+              ) : null}
+              {isAiDecisioningStudio ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  {!readOnly && adsCanvasView === "swimlane" ? addTileSquareButton : null}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setAdsCanvasView((v) => (v === "swimlane" ? "gantt" : "swimlane"))
+                    }
+                    className="shrink-0 rounded border border-[#801ED7] bg-white px-[11px] py-[6px] text-[10px] font-semibold text-[#801ED7] shadow-sm transition hover:bg-[#f6efff]"
+                  >
+                    {adsCanvasView === "swimlane"
+                      ? "View Gantt Chart"
+                      : "View Swimlane Timeline"}
+                  </button>
+                  {adsCanvasView === "gantt" ? (
+                    <label className="inline-flex select-none items-center gap-1.5 text-[10px] font-medium text-[#300266]">
+                      <input
+                        type="checkbox"
+                        className="h-[14px] w-[14px] rounded border-[#c9c4ef] text-[#801ED7] focus:ring-[#801ED7]"
+                        checked={showAdsOnboardingSessionsInGantt}
+                        onChange={(e) => setShowAdsOnboardingSessionsInGantt(e.target.checked)}
+                      />
+                      Show onboarding sessions
+                    </label>
+                  ) : null}
+                </div>
+              ) : showBrazeViewToggle ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setBrazeCoreView((v) => (v === "swimlane" ? "gantt" : "swimlane"))
+                    }
+                    className="shrink-0 rounded border border-[#801ED7] bg-white px-[11px] py-[6px] text-[10px] font-semibold text-[#801ED7] shadow-sm transition hover:bg-[#f6efff]"
+                  >
+                    {brazeCoreView === "swimlane"
+                      ? "View Gantt Chart"
+                      : "View Swimlane Timeline"}
+                  </button>
+                  {showAddTileToolbarButton ? addTileSquareButton : null}
+                  {brazeCoreView === "gantt" ? (
+                    <label className="inline-flex select-none items-center gap-1.5 text-[10px] font-medium text-[#300266]">
+                      <input
+                        type="checkbox"
+                        className="h-[14px] w-[14px] rounded border-[#c9c4ef] text-[#801ED7] focus:ring-[#801ED7]"
+                        checked={showOnboardingSessionsInGantt}
+                        onChange={(e) => setShowOnboardingSessionsInGantt(e.target.checked)}
+                      />
+                      Show onboarding sessions
+                    </label>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+            {topToolbarTitle ? (
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6 sm:px-12">
+                <h1 className="max-w-[min(90vw,48rem)] truncate text-center text-[20px] font-semibold leading-tight text-[#2b1650] sm:text-[26px]">
+                  {topToolbarTitle}
+                </h1>
               </div>
             ) : null}
-          </div>
-          {showSaveToolbar && (
-            <div className="flex shrink-0 items-center justify-end">
-              {savePatchKeys.size > 0 && (
-                <span className="mr-3 text-xs font-semibold text-[#91186E]">
-                  Unsaved changes: {savePatchKeys.size}
-                </span>
-              )}
-              <button
-                type="button"
-                onClick={() => void saveLayout()}
-                disabled={savePatchKeys.size === 0 || saving}
-                className="cursor-pointer rounded-md bg-[#801ED7] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {saving
-                  ? "Saving..."
-                  : `Save layout${savePatchKeys.size ? ` (${savePatchKeys.size})` : ""}`}
-              </button>
+            <div className="relative z-10 flex shrink-0 items-center justify-end">
+              {showSaveToolbar ? (
+                <>
+                  {savePatchKeys.size > 0 && (
+                    <span className="mr-2 text-[9px] font-semibold text-[#91186E]">
+                      Unsaved changes: {savePatchKeys.size}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => void saveLayout()}
+                    disabled={savePatchKeys.size === 0 || saving}
+                    className="cursor-pointer rounded border border-transparent bg-[#801ED7] px-[11px] py-[6px] text-[10px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {saving
+                      ? "Saving..."
+                      : `Save layout${savePatchKeys.size ? ` (${savePatchKeys.size})` : ""}`}
+                  </button>
+                </>
+              ) : null}
             </div>
-          )}
+          </div>
         </div>
       )}
       <div className="rounded-xl border border-[#C9C4EF] bg-white shadow-sm">
@@ -2489,8 +2529,8 @@ export function CanvasBoard({ config, tiles = [], readOnly = false }: Props) {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-[220px_1fr] border-b border-[#E8E5F8]">
-                <div className="border-r border-[#E8E5F8] px-3 py-3 text-sm font-semibold text-[#300266]">
+              <div className="grid grid-cols-[165px_1fr] border-b border-[#E8E5F8]">
+                <div className="border-r border-[#E8E5F8] px-2 py-[8px] text-[15px] font-semibold text-[#300266]">
                   Phases
                 </div>
                 <div
@@ -2501,7 +2541,7 @@ export function CanvasBoard({ config, tiles = [], readOnly = false }: Props) {
                   {timelineConfig.phases.map((phase, i) => (
                     <div
                       key={`phase-${phase.name}`}
-                      className="border-l border-[#E8E5F8] px-2 py-3 text-center text-xs font-semibold text-[#4C3B78]"
+                      className="border-l border-[#E8E5F8] px-2 py-[8px] text-center text-[13px] font-semibold text-[#4C3B78]"
                       style={{ gridColumn: `span ${phaseGridSpans[i]!}` }}
                     >
                       {phase.name}
@@ -2510,8 +2550,8 @@ export function CanvasBoard({ config, tiles = [], readOnly = false }: Props) {
                 </div>
               </div>
               {showMonthsRow && (
-                <div className="grid grid-cols-[220px_1fr] border-b border-[#E8E5F8]">
-                  <div className="border-r border-[#E8E5F8] px-3 py-3 text-sm font-semibold text-[#300266]">
+                <div className="grid grid-cols-[165px_1fr] border-b border-[#E8E5F8]">
+                  <div className="border-r border-[#E8E5F8] px-2 py-[8px] text-[15px] font-semibold text-[#300266]">
                     Months
                   </div>
                   <div
@@ -2521,7 +2561,7 @@ export function CanvasBoard({ config, tiles = [], readOnly = false }: Props) {
                     {timelineConfig.months.map((month, i) => (
                       <div
                         key={`month-${month.name}`}
-                        className="border-l border-[#E8E5F8] px-2 py-3 text-center text-xs font-semibold text-[#6B5A9A]"
+                        className="border-l border-[#E8E5F8] px-2 py-[8px] text-center text-[13px] font-semibold text-[#6B5A9A]"
                         style={{ gridColumn: `span ${monthGridSpans[i]!}` }}
                       >
                         {month.name}
@@ -2531,8 +2571,8 @@ export function CanvasBoard({ config, tiles = [], readOnly = false }: Props) {
                 </div>
               )}
               {showWeeksRow && (
-                <div className="grid grid-cols-[220px_1fr] border-b border-[#E8E5F8]">
-                  <div className="border-r border-[#E8E5F8] px-3 py-3 text-sm font-semibold text-[#300266]">
+                <div className="grid grid-cols-[165px_1fr] border-b border-[#E8E5F8]">
+                  <div className="border-r border-[#E8E5F8] px-2 py-[8px] text-[15px] font-semibold text-[#300266]">
                     Weeks
                   </div>
                   <div
@@ -2542,7 +2582,7 @@ export function CanvasBoard({ config, tiles = [], readOnly = false }: Props) {
                     {Array.from({ length: durationWeeks }, (_, index) => (
                       <div
                         key={index + 1}
-                        className="border-l border-[#E8E5F8] px-3 py-3 text-center text-xs font-semibold text-[#6B5A9A]"
+                        className="border-l border-[#E8E5F8] px-2 py-[8px] text-center text-[13px] font-semibold text-[#6B5A9A]"
                         style={{ gridColumn: `span ${GROWTH_SILVER_COLUMNS_PER_WEEK}` }}
                       >
                         {`Week ${index + 1}`}
@@ -2567,9 +2607,10 @@ export function CanvasBoard({ config, tiles = [], readOnly = false }: Props) {
       <div
         className={clsx(
           "rounded-xl border border-[#E8E5F8] bg-white px-4 py-3 text-[#4c3b78]",
-          isAiDecisioningStudio ? "mt-10 text-[19px] leading-snug" : "mt-3 text-sm",
+          isAiDecisioningStudio ? "mt-10 text-[17px] leading-snug" : "mt-3 text-sm",
         )}
       >
+        <div className="origin-top-left scale-[0.8]">
         {isAiDecisioningStudio ? (
           <div className="flex flex-col gap-3">
             <p className="font-semibold text-[#2c1650]">
@@ -2644,6 +2685,7 @@ export function CanvasBoard({ config, tiles = [], readOnly = false }: Props) {
             </span>
           </>
         )}
+        </div>
       </div>
       )}
       {isAiDecisioningStudio ? (

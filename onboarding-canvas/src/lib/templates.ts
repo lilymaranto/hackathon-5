@@ -468,11 +468,11 @@ const STANDARD_12_WEEK_TEMPLATE: SeedTemplateTile[] = withDefaultStackOrder([
   { "Tile_ID": "platform_gov", "Workstream": "governance", "Title": "Platform Governance & Security", "Start_Week": 3, "Span_Weeks": 2, "Stack_Order": 2, "Category": "onboarding_session" },
   { "Tile_ID": "workbook_walkthrough", "Workstream": "governance", "Title": "Project Workbook Walkthrough", "Start_Week": 5, "Span_Weeks": 2, "Stack_Order": 2, "Category": "onboarding_session" },
   { "Tile_ID": "setup_gov_task", "Workstream": "governance", "Title": "Setup Governance & Security", "Start_Week": 7, "Span_Weeks": 2, "Stack_Order": 2, "Category": "customer_activity" },
-  { "Tile_ID": "dash_complete", "Workstream": "governance", "Title": "Dashboard Setup Complete", "Start_Week": 9, "Span_Weeks": 4, "Stack_Order": 4, "Category": "milestone" },
+  { "Tile_ID": "dash_complete", "Workstream": "governance", "Title": "Dashboard Setup Complete", "Start_Week": 9, "Span_Weeks": 5, "Stack_Order": 1, "Category": "milestone" },
 
   { "Tile_ID": "data_workshop", "Workstream": "data", "Title": "Campaign & Data Planning Workshops", "Start_Week": 1, "Span_Weeks": 8, "Stack_Order": 1, "Category": "onboarding_session" },
   { "Tile_ID": "data_planning", "Workstream": "data", "Title": "Campaign & Data Planning", "Start_Week": 1, "Span_Weeks": 8, "Stack_Order": 2, "Category": "customer_activity" },
-  { "Tile_ID": "data_complete", "Workstream": "data", "Title": "Campaign and Data Planning Complete", "Start_Week": 9, "Span_Weeks": 4, "Stack_Order": 1, "Category": "milestone" },
+  { "Tile_ID": "data_complete", "Workstream": "data", "Title": "Campaign and Data Planning Complete", "Start_Week": 9, "Span_Weeks": 5, "Stack_Order": 1, "Category": "milestone" },
 
   { "Tile_ID": "tech_overview", "Workstream": "tech", "Title": "Tech Overview", "Start_Week": 4, "Span_Weeks": 2, "Stack_Order": 1, "Category": "onboarding_session" },
   { "Tile_ID": "sdk_deep_dive", "Workstream": "tech", "Title": "SDK Deep Dive", "Start_Week": 6, "Span_Weeks": 2, "Stack_Order": 1, "Category": "onboarding_session" },
@@ -485,7 +485,7 @@ const STANDARD_12_WEEK_TEMPLATE: SeedTemplateTile[] = withDefaultStackOrder([
   { "Tile_ID": "user_import", "Workstream": "tech", "Title": "Import User Data & Subscription States", "Start_Week": 9, "Span_Weeks": 10, "Stack_Order": 4, "Category": "customer_activity" },
   { "Tile_ID": "channel_setup", "Workstream": "tech", "Title": "Setup Mobile/Web Channels", "Start_Week": 18, "Span_Weeks": 7, "Stack_Order": 3, "Category": "customer_activity" },
   { "Tile_ID": "data_exports", "Workstream": "tech", "Title": "Setup Data Exports", "Start_Week": 19, "Span_Weeks": 6, "Stack_Order": 4, "Category": "customer_activity" },
-  { "Tile_ID": "tech_complete", "Workstream": "tech", "Title": "Tech Integration Complete", "Start_Week": 25, "Span_Weeks": 4, "Stack_Order": 2, "Category": "milestone" },
+  { "Tile_ID": "tech_complete", "Workstream": "tech", "Title": "Tech Integration Complete", "Start_Week": 25, "Span_Weeks": 5, "Stack_Order": 2, "Category": "milestone" },
 
   { "Tile_ID": "email_discovery_session", "Workstream": "email", "Title": "Email Discovery Workshop", "Start_Week": 3, "Span_Weeks": 2, "Stack_Order": 1, "Category": "onboarding_session" },
   { "Tile_ID": "email_dns_ssl", "Workstream": "email", "Title": "Setup Email Config (DNS & SSL)", "Start_Week": 5, "Span_Weeks": 3, "Stack_Order": 1, "Category": "customer_activity" },
@@ -508,12 +508,12 @@ const STANDARD_12_WEEK_TEMPLATE: SeedTemplateTile[] = withDefaultStackOrder([
     { "Tile_ID": "acquire_waba", "Workstream": "whatsapp", "Title": "Acquire WABA", "Start_Week": 9, "Span_Weeks": 4, "Stack_Order": 1, "Category": "customer_activity" },
     { "Tile_ID": "wa_optin_campaign", "Workstream": "whatsapp", "Title": "Build & Launch Opt-in Campaign", "Start_Week": 13, "Span_Weeks": 8, "Stack_Order": 1, "Category": "customer_activity" },
     { "Tile_ID": "wa_templates", "Workstream": "whatsapp", "Title": "Build WA Templates in WA Manager", "Start_Week": 13, "Span_Weeks": 8, "Stack_Order": 2, "Category": "customer_activity" },
-    { "Tile_ID": "whatsapp_complete", "Workstream": "whatsapp", "Title": "WhatsApp Setup Complete", "Start_Week": 21, "Span_Weeks": 4, "Stack_Order": 1, "Category": "milestone" },
+    { "Tile_ID": "whatsapp_complete", "Workstream": "whatsapp", "Title": "WhatsApp Setup Complete", "Start_Week": 21, "Span_Weeks": 5, "Stack_Order": 1, "Category": "milestone" },
   
 
   { "Tile_ID": "phase_1_build", "Workstream": "campaign", "Title": "Build and Launch Phase 1 Use Cases", "Start_Week": 17, "Span_Weeks": 15, "Stack_Order": 1, "Category": "customer_activity" },
-  { "Tile_ID": "journeys_live", "Workstream": "campaign", "Title": "Multi Channel Journeys Live", "Start_Week": 32, "Span_Weeks": 3, "Stack_Order": 1, "Category": "milestone" },
-  { "Tile_ID": "phase_2_optional", "Workstream": "campaign", "Title": "Launch Phase 2 Use Cases (Optional)", "Start_Week": 35, "Span_Weeks": 14, "Stack_Order": 1, "Category": "customer_activity" },
+  { "Tile_ID": "journeys_live", "Workstream": "campaign", "Title": "Multi Channel Journeys Live", "Start_Week": 32, "Span_Weeks": 4, "Stack_Order": 1, "Category": "milestone" },
+  { "Tile_ID": "phase_2_optional", "Workstream": "campaign", "Title": "Launch Phase 2 Use Cases (Optional)", "Start_Week": 36, "Span_Weeks": 13, "Stack_Order": 1, "Category": "customer_activity" },
 
   { "Tile_ID": "foundations_live", "Workstream": "enablement", "Title": "Complete Live Foundations Courses", "Start_Week": 1, "Span_Weeks": 16, "Stack_Order": 1, "Category": "customer_activity" },
   { "Tile_ID": "ondemand_learning", "Workstream": "enablement", "Title": "Complete On-Demand Braze Learning Courses", "Start_Week": 17, "Span_Weeks": 16, "Stack_Order": 1, "Category": "customer_activity" },

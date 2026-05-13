@@ -76,7 +76,7 @@ function RiskList({ items }: { items: string[] }) {
 function GrowthSilverTable({ rows }: { rows: GrowthSilverResourceRow[] }) {
   return (
     <div className="min-w-0 overflow-x-auto">
-      <table className="w-full min-w-[min(100%,920px)] table-fixed border-collapse text-left text-base text-[#2F2354]">
+      <table className="w-full min-w-[min(100%,920px)] table-fixed border-collapse text-left text-[12px] text-[#2F2354]">
         <colgroup>
           <col style={{ width: "11%" }} />
           <col style={{ width: "11%" }} />
@@ -88,32 +88,32 @@ function GrowthSilverTable({ rows }: { rows: GrowthSilverResourceRow[] }) {
         </colgroup>
         <thead>
           <tr className="bg-[#faf8ff]">
-            <th className={`${CELL_GRID} px-3 py-3.5 text-[18px] font-semibold text-[#2c1650] sm:px-4`}>
+            <th className={`${CELL_GRID} px-3 py-3.5 text-[14px] font-semibold text-[#2c1650] sm:px-4`}>
               Team
             </th>
-            <th className={`${CELL_GRID} px-3 py-3.5 text-[18px] font-semibold text-[#2c1650] sm:px-4`}>
+            <th className={`${CELL_GRID} px-3 py-3.5 text-[14px] font-semibold text-[#2c1650] sm:px-4`}>
               Role
             </th>
-            <th className={`${CELL_GRID} px-3 py-3.5 text-[18px] font-semibold text-[#2c1650] sm:px-4`}>
+            <th className={`${CELL_GRID} px-3 py-3.5 text-[14px] font-semibold text-[#2c1650] sm:px-4`}>
               Responsibilities
             </th>
             <th
-              className={`${CELL_GRID} px-3 py-3.5 text-[18px] font-semibold leading-tight text-[#2c1650] sm:px-4`}
+              className={`${CELL_GRID} px-3 py-3.5 text-[14px] font-semibold leading-tight text-[#2c1650] sm:px-4`}
             >
               Delivery Risk If Not Identified
             </th>
             <th
-              className={`${CELL_GRID} px-3 py-3.5 text-[17px] font-semibold leading-tight text-[#2c1650] sm:px-4`}
+              className={`${CELL_GRID} px-3 py-3.5 text-[13px] font-semibold leading-tight text-[#2c1650] sm:px-4`}
             >
               Discovery
             </th>
             <th
-              className={`${CELL_GRID} px-3 py-3.5 text-[17px] font-semibold leading-tight text-[#2c1650] sm:px-4`}
+              className={`${CELL_GRID} px-3 py-3.5 text-[13px] font-semibold leading-tight text-[#2c1650] sm:px-4`}
             >
               Planning
             </th>
             <th
-              className={`${CELL_GRID} px-3 py-3.5 text-[17px] font-semibold leading-tight text-[#2c1650] sm:px-4`}
+              className={`${CELL_GRID} px-3 py-3.5 text-[13px] font-semibold leading-tight text-[#2c1650] sm:px-4`}
             >
               Execution
             </th>
@@ -135,16 +135,16 @@ function GrowthSilverTable({ rows }: { rows: GrowthSilverResourceRow[] }) {
               <td className={`${CELL_GRID} px-3 py-3.5 sm:px-4`}>
                 <BulletList items={row.responsibilities} />
               </td>
-              <td className={`${CELL_GRID} px-3 py-3.5 text-[17px] leading-snug sm:px-4`}>
+              <td className={`${CELL_GRID} px-3 py-3.5 text-[13px] leading-snug sm:px-4`}>
                 <RiskList items={row.deliveryRisk} />
               </td>
-              <td className={`${CELL_GRID} px-3 py-3.5 text-[17px] tabular-nums sm:px-4`}>
+              <td className={`${CELL_GRID} px-3 py-3.5 text-[13px] tabular-nums sm:px-4`}>
                 {row.discovery}
               </td>
-              <td className={`${CELL_GRID} px-3 py-3.5 text-[17px] tabular-nums sm:px-4`}>
+              <td className={`${CELL_GRID} px-3 py-3.5 text-[13px] tabular-nums sm:px-4`}>
                 {row.planning}
               </td>
-              <td className={`${CELL_GRID} px-3 py-3.5 text-[17px] tabular-nums sm:px-4`}>
+              <td className={`${CELL_GRID} px-3 py-3.5 text-[13px] tabular-nums sm:px-4`}>
                 {row.execution}
               </td>
             </tr>
@@ -161,7 +161,7 @@ function ProfileCell({ lines }: { lines: string[] }) {
       {lines.map((line, i) => (
         <p
           key={`${line}-${i}`}
-          className={i === 0 ? "font-semibold text-[#300266]" : "text-[17px] font-normal text-[#5c4a7a]"}
+          className={i === 0 ? "font-semibold text-[#300266]" : "text-[13px] font-normal text-[#5c4a7a]"}
         >
           {line}
         </p>
@@ -173,7 +173,7 @@ function ProfileCell({ lines }: { lines: string[] }) {
 function StandardBrazeTable({ rows }: { rows: StandardBrazeResourceRow[] }) {
   return (
     <div className="min-w-0 overflow-x-auto">
-      <table className="w-full min-w-[min(100%,980px)] table-fixed border-collapse text-left text-base text-[#2F2354]">
+      <table className="w-full min-w-[min(100%,980px)] table-fixed border-collapse text-left text-[12px] text-[#2F2354]">
         <colgroup>
           <col style={{ width: "16%" }} />
           <col />
@@ -184,29 +184,29 @@ function StandardBrazeTable({ rows }: { rows: StandardBrazeResourceRow[] }) {
         </colgroup>
         <thead>
           <tr className="bg-[#faf8ff]">
-            <th className={`${CELL_GRID} px-3 py-3.5 text-[18px] font-semibold text-[#2c1650] sm:px-4`}>
+            <th className={`${CELL_GRID} px-3 py-3.5 text-[14px] font-semibold text-[#2c1650] sm:px-4`}>
               Profile
             </th>
-            <th className={`${CELL_GRID} px-3 py-3.5 text-[18px] font-semibold text-[#2c1650] sm:px-4`}>
+            <th className={`${CELL_GRID} px-3 py-3.5 text-[14px] font-semibold text-[#2c1650] sm:px-4`}>
               Responsibilities
             </th>
             <th
-              className={`${CELL_GRID} px-3 py-3.5 text-[18px] font-semibold leading-tight text-[#2c1650] sm:px-4`}
+              className={`${CELL_GRID} px-3 py-3.5 text-[14px] font-semibold leading-tight text-[#2c1650] sm:px-4`}
             >
               Delivery Risk If Not Identified
             </th>
             <th
-              className={`${CELL_GRID} px-3 py-3.5 text-[17px] font-semibold leading-tight text-[#2c1650] sm:px-4`}
+              className={`${CELL_GRID} px-3 py-3.5 text-[13px] font-semibold leading-tight text-[#2c1650] sm:px-4`}
             >
               Discovery
             </th>
             <th
-              className={`${CELL_GRID} px-3 py-3.5 text-[17px] font-semibold leading-tight text-[#2c1650] sm:px-4`}
+              className={`${CELL_GRID} px-3 py-3.5 text-[13px] font-semibold leading-tight text-[#2c1650] sm:px-4`}
             >
               Planning
             </th>
             <th
-              className={`${CELL_GRID} px-3 py-3.5 text-[17px] font-semibold leading-tight text-[#2c1650] sm:px-4`}
+              className={`${CELL_GRID} px-3 py-3.5 text-[13px] font-semibold leading-tight text-[#2c1650] sm:px-4`}
             >
               Execution
             </th>
@@ -225,16 +225,16 @@ function StandardBrazeTable({ rows }: { rows: StandardBrazeResourceRow[] }) {
               <td className={`${CELL_GRID} px-3 py-3.5 sm:px-4`}>
                 <BulletList items={row.responsibilities} />
               </td>
-              <td className={`${CELL_GRID} px-3 py-3.5 text-[17px] leading-snug sm:px-4`}>
+              <td className={`${CELL_GRID} px-3 py-3.5 text-[13px] leading-snug sm:px-4`}>
                 <RiskList items={row.deliveryRisk} />
               </td>
-              <td className={`${CELL_GRID} px-3 py-3.5 text-[17px] tabular-nums sm:px-4`}>
+              <td className={`${CELL_GRID} px-3 py-3.5 text-[13px] tabular-nums sm:px-4`}>
                 {row.discovery}
               </td>
-              <td className={`${CELL_GRID} px-3 py-3.5 text-[17px] tabular-nums sm:px-4`}>
+              <td className={`${CELL_GRID} px-3 py-3.5 text-[13px] tabular-nums sm:px-4`}>
                 {row.planning}
               </td>
-              <td className={`${CELL_GRID} px-3 py-3.5 text-[17px] tabular-nums sm:px-4`}>
+              <td className={`${CELL_GRID} px-3 py-3.5 text-[13px] tabular-nums sm:px-4`}>
                 {row.execution}
               </td>
             </tr>
@@ -264,7 +264,7 @@ export function BrazeCoreResourcesChart({
 
   return (
     <div>
-      <h3 className="text-center text-[28px] font-semibold leading-tight text-[#2c1650]">{title}</h3>
+      <h3 className="text-center text-[24px] font-semibold leading-tight text-[#2c1650]">{title}</h3>
       <div className="mt-6">
         {isGrowthSilver ? (
           <GrowthSilverTable rows={filterGrowthSilverRows(GROWTH_SILVER_RESOURCE_ROWS, email)} />

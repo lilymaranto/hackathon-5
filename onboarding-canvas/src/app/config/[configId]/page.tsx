@@ -34,11 +34,8 @@ export default async function PublicConfigPage({
   const planTitle = formatConfigPlanHeading(config);
 
   return (
-    <main className="mx-auto flex min-h-screen w-[90vw] max-w-none flex-col gap-4 p-4 md:p-6">
-      <header className="px-1 text-center">
-        <h1 className="text-3xl font-semibold text-[#2b1650]">{planTitle}</h1>
-      </header>
-      <CanvasBoard config={config} tiles={tiles} />
+    <main className="mx-auto flex min-h-screen w-[95vw] max-w-none flex-col gap-4 p-4 md:p-6">
+      <CanvasBoard config={config} tiles={tiles} readOnly topToolbarTitle={planTitle} />
     </main>
   );
 }

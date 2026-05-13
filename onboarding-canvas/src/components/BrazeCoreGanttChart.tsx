@@ -1,6 +1,12 @@
 "use client";
 
 import { BrazeCoreSpanResizeHandle } from "@/components/BrazeCoreSpanResizeHandle";
+import {
+  GANTT_ROW_TOP_PAD_PX,
+  GANTT_TASK_BAR_HEIGHT_PX,
+  GANTT_TASK_BAR_LANE_GAP_PX,
+  scaleYpx,
+} from "@/lib/canvas-layout-y";
 import { GROWTH_SILVER_COLUMNS_PER_WEEK, WORKSTREAMS } from "@/lib/constants";
 import { getTileTimelineUnits } from "@/lib/timeline-units";
 import type { TimelineConfig } from "@/lib/templates";
@@ -13,6 +19,9 @@ import type { CSSProperties, ReactNode, Ref } from "react";
 import { Fragment, useMemo } from "react";
 
 const GANTT_GUIDE_COLOR = "rgba(232, 229, 248, 0.95)";
+
+const ADS_GANTT_LEGEND_SWATCH_H_PX = scaleYpx(32);
+const ADS_GANTT_LEGEND_SWATCH_W_PX = scaleYpx(64);
 
 type GuideLineKind = "thin" | "thick";
 
@@ -138,12 +147,6 @@ const ADS_GANTT_OMIT_TILE_IDS = new Set(["ads_ms_kickoff"]);
 const WEEKLY_ALIGNMENT_TILE_ID = "weekly_alignment";
 /** Campaign: optional phase 2 is always its own row (after phase 1 + milestone block). */
 const CAMPAIGN_PHASE_2_TILE_IDS = new Set(["launch_phase_2", "phase_2_optional"]);
-
-/** Matches {@link GanttTaskBar} bar height (`h-8`). */
-const GANTT_BAR_HEIGHT_PX = 32;
-const GANTT_BAR_LANE_GAP_PX = 4;
-/** Vertical inset above lane 0 / below last lane — kept small so rows hug single tiles. */
-const GANTT_ROW_TOP_PAD_PX = 4;
 
 function tileKey(tile: TileRecord): string {
   return tile.CaboodlePatchKey ?? `${tile.Config_ID}__${tile.Tile_ID}`;
@@ -271,7 +274,6 @@ function buildGanttRowsByLaneOrder(
 
 const ADS_GANTT_MILESTONE_ACCENT = "#801ED7";
 const ADS_GANTT_CUSTOMER_BG = "#C9C4EF";
-const ADS_GANTT_CUSTOMER_BORDER = "#801ED7";
 const ADS_GANTT_CUSTOMER_TEXT = "#300266";
 /** AI Gantt left rail + onboarding tiles — align with swimlane {@link CanvasBoard} `tileClass`. */
 const ADS_GANTT_LEFT_RAIL_CUSTOMER_BG = "#C9C4EF";
@@ -319,8 +321,8 @@ function rowTimelineMinHeightPx(maxLane: number): number {
   const lanes = maxLane + 1;
   return (
     GANTT_ROW_TOP_PAD_PX * 2 +
-    lanes * GANTT_BAR_HEIGHT_PX +
-    Math.max(0, lanes - 1) * GANTT_BAR_LANE_GAP_PX
+    lanes * GANTT_TASK_BAR_HEIGHT_PX +
+    Math.max(0, lanes - 1) * GANTT_TASK_BAR_LANE_GAP_PX
   );
 }
 
@@ -402,11 +404,15 @@ function GanttTaskBarDraggable({
     width: `${Math.max(widthPct, 0.4)}%`,
     minWidth: 4,
     top: topPx,
+    height: GANTT_TASK_BAR_HEIGHT_PX,
     transform: CSS.Translate.toString(transform),
   };
 
-  const common =
-    "absolute flex h-8 items-center justify-center gap-1 overflow-hidden rounded-md px-1.5 text-center text-[13px] font-medium leading-tight shadow-sm";
+  const barTextClass = matchAiDecisioningSwimlaneBars ? "text-[11px]" : "text-[9px]";
+  const common = clsx(
+    "absolute flex items-center justify-center gap-1 overflow-hidden rounded-md px-1.5 text-center font-medium leading-tight shadow-sm",
+    barTextClass,
+  );
   const grabClass = cat !== "milestone" ? "cursor-grab active:cursor-grabbing" : "";
   const draggingClass = isDragging ? "z-20 opacity-80" : "";
 
@@ -458,11 +464,10 @@ function GanttTaskBarDraggable({
         type="button"
         aria-label={tile.Title}
         title={tile.Title}
-        className={clsx(common, "border-2 bg-transparent", grabClass, draggingClass)}
+        className={clsx(common, "border-0", grabClass, draggingClass)}
         style={{
           ...posStyle,
           backgroundColor: ADS_GANTT_CUSTOMER_BG,
-          borderColor: ADS_GANTT_CUSTOMER_BORDER,
           color: ADS_GANTT_CUSTOMER_TEXT,
         }}
         onClick={onOpen}
@@ -474,12 +479,17 @@ function GanttTaskBarDraggable({
 
   const isMilestone = cat === "milestone";
   if (isMilestone) {
+    const milestoneBarText = "text-[8px]";
     return (
       <button
         ref={setNodeRef}
         type="button"
         aria-label={tile.Title}
-        className={clsx(common, "z-[5] border-2 bg-white shadow-sm", draggingClass)}
+        className={clsx(
+          "absolute z-[5] flex items-center justify-center gap-0.5 overflow-hidden rounded-md px-1 text-center font-semibold leading-tight shadow-sm border-2 bg-white",
+          milestoneBarText,
+          draggingClass,
+        )}
         style={{
           ...posStyle,
           borderColor: "#ffffff",
@@ -490,14 +500,14 @@ function GanttTaskBarDraggable({
         {...attributes}
       >
         <Star
-          size={16}
+          size={15}
           className="shrink-0"
           style={{ color: milestoneFill }}
           fill={milestoneFill}
           stroke={milestoneFill}
           aria-hidden
         />
-        <span className="line-clamp-2 w-full font-semibold" style={{ color: milestoneFill }}>
+        <span className="line-clamp-2 w-full" style={{ color: milestoneFill }}>
           {tile.Title}
         </span>
       </button>
@@ -568,9 +578,13 @@ function GanttTaskBarStatic({
     width: `${Math.max(widthPct, 0.4)}%`,
     minWidth: 4,
     top: topPx,
+    height: GANTT_TASK_BAR_HEIGHT_PX,
   };
-  const common =
-    "absolute flex h-8 items-center justify-center gap-1 overflow-hidden rounded-md px-1.5 text-center text-[13px] font-medium leading-tight shadow-sm";
+  const barTextClass = matchAiDecisioningSwimlaneBars ? "text-[11px]" : "text-[9px]";
+  const common = clsx(
+    "absolute flex items-center justify-center gap-1 overflow-hidden rounded-md px-1.5 text-center font-medium leading-tight shadow-sm",
+    barTextClass,
+  );
 
   if (cat === "onboarding_session" && matchAiDecisioningSwimlaneBars) {
     return (
@@ -613,11 +627,10 @@ function GanttTaskBarStatic({
         type="button"
         aria-label={tile.Title}
         title={tile.Title}
-        className={clsx(common, "border-2 bg-transparent")}
+        className={clsx(common, "border-0")}
         style={{
           ...posStyle,
           backgroundColor: ADS_GANTT_CUSTOMER_BG,
-          borderColor: ADS_GANTT_CUSTOMER_BORDER,
           color: ADS_GANTT_CUSTOMER_TEXT,
         }}
         onClick={onOpen}
@@ -626,11 +639,15 @@ function GanttTaskBarStatic({
   }
 
   if (cat === "milestone") {
+    const milestoneBarText = "text-[8px]";
     return (
       <button
         type="button"
         aria-label={tile.Title}
-        className={clsx(common, "z-[5] border-2 bg-white shadow-sm")}
+        className={clsx(
+          "absolute z-[5] flex items-center justify-center gap-0.5 overflow-hidden rounded-md px-1 text-center font-semibold leading-tight shadow-sm border-2 bg-white",
+          milestoneBarText,
+        )}
         style={{
           ...posStyle,
           borderColor: "#ffffff",
@@ -639,14 +656,14 @@ function GanttTaskBarStatic({
         onClick={onOpen}
       >
         <Star
-          size={16}
+          size={15}
           className="shrink-0"
           style={{ color: milestoneFill }}
           fill={milestoneFill}
           stroke={milestoneFill}
           aria-hidden
         />
-        <span className="line-clamp-2 w-full font-semibold" style={{ color: milestoneFill }}>
+        <span className="line-clamp-2 w-full" style={{ color: milestoneFill }}>
           {tile.Title}
         </span>
       </button>
@@ -750,9 +767,10 @@ export function BrazeCoreGanttChart({
 
   return (
     <div className="w-full min-w-0">
-      <div className="mb-4 flex flex-col gap-3 border-b border-[#E8E5F8] px-1 pb-3 text-sm text-[#2F2354]">
+      <div className="mb-2 flex flex-col gap-2 border-b border-[#E8E5F8] px-1 pb-2 text-sm text-[#2F2354]">
+        <div className="origin-top-left scale-[0.8]">
         {matchAiDecisioningSwimlaneBars ? (
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3 text-[12px] leading-snug">
             <p className="font-semibold text-[#2c1650]">AI Decisioning Studio Key</p>
             <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
               <span className="inline-flex items-center gap-2">
@@ -768,7 +786,8 @@ export function BrazeCoreGanttChart({
               </span>
               <span className="inline-flex items-center gap-2">
                 <span
-                  className="inline-block h-8 w-16 shrink-0 rounded-md bg-[#300266] shadow-sm"
+                  className="inline-block shrink-0 rounded-md bg-[#300266] shadow-sm"
+                  style={{ height: ADS_GANTT_LEGEND_SWATCH_H_PX, width: ADS_GANTT_LEGEND_SWATCH_W_PX }}
                   aria-hidden
                 />
                 <span>
@@ -779,7 +798,8 @@ export function BrazeCoreGanttChart({
               </span>
               <span className="inline-flex items-center gap-2">
                 <span
-                  className="inline-block h-8 w-16 shrink-0 rounded-md border-2 border-[#801ED7] bg-[#C9C4EF] shadow-sm"
+                  className="inline-block shrink-0 rounded-md border-2 border-[#801ED7] bg-[#C9C4EF] shadow-sm"
+                  style={{ height: ADS_GANTT_LEGEND_SWATCH_H_PX, width: ADS_GANTT_LEGEND_SWATCH_W_PX }}
                   aria-hidden
                 />
                 <span>
@@ -791,7 +811,7 @@ export function BrazeCoreGanttChart({
             </div>
           </div>
         ) : (
-          <>
+          <div className="text-[12px] leading-snug text-[#2F2354]">
             <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
               <span className="font-semibold text-[#2c1650]">Key</span>
               <span className="inline-flex items-center gap-2">
@@ -828,7 +848,7 @@ export function BrazeCoreGanttChart({
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-[#f0ebfb] pt-3">
-              <span className="text-sm font-semibold uppercase tracking-wide text-[#6B5A9A]">
+              <span className="font-semibold uppercase tracking-wide text-[#6B5A9A]">
                 {laneLegendTitle}
               </span>
               {streamLegendRows.map((ws) => (
@@ -838,14 +858,15 @@ export function BrazeCoreGanttChart({
                     style={{ backgroundColor: ws.color }}
                     aria-hidden
                   />
-                  <span className="max-w-[11rem] truncate text-sm text-[#2F2354]" title={ws.label}>
+                  <span className="max-w-[11rem] truncate text-[#2F2354]" title={ws.label}>
                     {ws.label}
                   </span>
                 </span>
               ))}
             </div>
-          </>
+          </div>
         )}
+        </div>
       </div>
 
       <div className="min-w-0 overflow-x-auto">
@@ -954,7 +975,10 @@ export function BrazeCoreGanttChart({
                     <button
                       key={tileKey(tile)}
                       type="button"
-                      className="text-left text-base font-semibold leading-snug drop-shadow-sm hover:underline"
+                      className={clsx(
+                        "text-left font-semibold leading-snug drop-shadow-sm hover:underline",
+                        matchAiDecisioningSwimlaneBars ? "text-[14px]" : "text-[12px]",
+                      )}
                       style={{ color: leftRailLabelColor }}
                       onClick={() => onOpenTile(tile)}
                     >
@@ -971,14 +995,14 @@ export function BrazeCoreGanttChart({
                     const widthPct = (spanUnits / timelineColumns) * 100;
                     const topPx =
                       GANTT_ROW_TOP_PAD_PX +
-                      lane * (GANTT_BAR_HEIGHT_PX + GANTT_BAR_LANE_GAP_PX);
+                      lane * (GANTT_TASK_BAR_HEIGHT_PX + GANTT_TASK_BAR_LANE_GAP_PX);
                     const frameStyle: CSSProperties = {
                       position: "absolute",
                       left: `${leftPct}%`,
                       width: `${Math.max(widthPct, 0.4)}%`,
                       minWidth: 4,
                       top: topPx,
-                      height: GANTT_BAR_HEIGHT_PX,
+                      height: GANTT_TASK_BAR_HEIGHT_PX,
                     };
                     return (
                       <Fragment key={tileKey(tile)}>
@@ -1003,7 +1027,9 @@ export function BrazeCoreGanttChart({
                               onSpanChange={(span) => spanResize.onSpanChange(tile, span)}
                               heightClass="h-8"
                               mode={spanResize.spanResizeMode ?? "braze"}
-                              handleHeightPx={spanResize.spanResizeHandleHeightPx}
+                              handleHeightPx={
+                                spanResize.spanResizeHandleHeightPx ?? GANTT_TASK_BAR_HEIGHT_PX
+                              }
                             />
                           </div>
                         ) : null}
