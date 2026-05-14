@@ -36,7 +36,7 @@ export function approximateTimelineLabel(
     planId === "quickstart_gold" ||
     planId === "quickstart_silver"
   ) {
-    return `Timeline columns ${startUnit}–${endUnit} (span ${span}) — see swimlane month bands for calendar mapping`;
+    return `Timeline columns ${startUnit}–${endUnit} (span ${span})`;
   }
   if (planId === "ignite_gold") {
     return `Weeks ${startUnit}–${endUnit} (span ${span} weeks on Ignite Gold grid)`;
@@ -70,7 +70,7 @@ export type OmExportSection =
 export function buildOmExportSections(config: ConfigRecord, tile: TileRecord): OmExportSection[] {
   const sections: OmExportSection[] = [];
   const timeline = approximateTimelineLabel(config, tile);
-  const titleLine = `--- ${timeline} — ${tile.Title} ---`;
+  const titleLine = `${timeline} — ${tile.Title}`;
   sections.push({ kind: "heading", text: titleLine });
   sections.push({ kind: "body", text: `Workstream: ${workstreamLabel(tile.Workstream)}` });
 
@@ -104,8 +104,6 @@ export function buildOmExportSections(config: ConfigRecord, tile: TileRecord): O
       sections.push({ kind: "body", text: "Desired outcomes:" });
       sections.push({ kind: "body", text: (tile.Desired_Outcomes ?? "").trim() });
     }
-    sections.push({ kind: "body", text: "" });
-    sections.push({ kind: "body", text: `Tile ID: ${tile.Tile_ID} · Category: ${tile.Category}` });
     return sections;
   }
 

@@ -4,6 +4,7 @@ import {
   fetchConfigById,
   fetchTileDeleteKeysForConfig,
   patchConfig,
+  replaceTilesForConfigSeed,
 } from "@/lib/caboodle";
 import { parsePlanOptionId, WORKSTREAMS } from "@/lib/constants";
 import {
@@ -12,7 +13,7 @@ import {
 } from "@/lib/braze-workstream-order";
 import { parseHexColorOptional } from "@/lib/tile-category-colors";
 import { parseTimelineAnnotationField, type TimelineAnnotationDocument } from "@/lib/timeline-annotations";
-import { IndustryType, ProductType, Workstream } from "@/lib/types";
+import { IndustryType, PlanOptionId, ProductType, Workstream } from "@/lib/types";
 import { after, NextRequest, NextResponse } from "next/server";
 
 /** Slow-google-sheet deletes (paced retries); avoids premature timeouts on hosts like Vercel. */
@@ -40,6 +41,10 @@ export async function PATCH(
 ) {
   try {
     const { configId } = await params;
+    const existing = await fetchConfigById(configId);
+    if (!existing) {
+      return NextResponse.json({ error: "Config not found." }, { status: 404 });
+    }
     const body = (await request.json()) as Record<string, unknown> & {
       title?: string;
       chosenTitle?: string;
@@ -71,8 +76,14 @@ export async function PATCH(
       ? parseTimelineAnnotationField(hasTimelineCamel ? body.timelineAnnotation : body.TimelineAnnotation)
       : undefined;
 
-    const planOptionResolved =
+    const explicitPlanParsed =
       body.planOptionId !== undefined ? parsePlanOptionId(body.planOptionId) : undefined;
+    const nextProductType = body.productType ?? existing.Product_Type;
+    const nextPlanOptionId: PlanOptionId =
+      nextProductType === "AI Decisioning Studio"
+        ? "ai_decisioning_studio"
+        : explicitPlanParsed ??
+          (existing.planOptionId === "ai_decisioning_studio" ? "12_week" : existing.planOptionId);
 
     const ob = body.onboardingSessionTileColor?.trim() ?? "";
     const cb = body.customerActivityTileColor?.trim() ?? "";
@@ -123,7 +134,9 @@ export async function PATCH(
       Product_Type: body.productType,
       Industry: body.industry,
       Password: body.password,
-      ...(planOptionResolved ? { planOptionId: planOptionResolved } : {}),
+      ...(body.productType !== undefined || explicitPlanParsed
+        ? { planOptionId: nextPlanOptionId }
+        : {}),
       ...(body.handoffDocUrl !== undefined ? { handoffDocUrl: body.handoffDocUrl } : {}),
       ...(hasOnboardingKey ? { onboardingSessionTileColor: ob } : {}),
       ...(hasCustomerKey ? { customerActivityTileColor: cb } : {}),
@@ -142,6 +155,17 @@ export async function PATCH(
         ? { timelineAnnotation: timelineAnnotationPatch }
         : {}),
     });
+
+    const shouldReseedTiles =
+      nextProductType !== existing.Product_Type || nextPlanOptionId !== existing.planOptionId;
+    if (shouldReseedTiles) {
+      await replaceTilesForConfigSeed({
+        configId,
+        productType: nextProductType,
+        planOptionId: nextPlanOptionId,
+        channels: existing.channels,
+      });
+    }
 
     const updated = await fetchConfigById(configId);
     return NextResponse.json({ data: updated ?? { ok: true } });
