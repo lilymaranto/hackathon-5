@@ -1,17 +1,12 @@
 import { ConfigEditForm } from "@/components/ConfigEditForm";
-import { authOptions } from "@/lib/auth-options";
 import { fetchConfigById } from "@/lib/caboodle";
-import { getServerSession } from "next-auth";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 
 export default async function EditConfigPage({
   params,
 }: {
   params: Promise<{ configId: string }>;
 }) {
-  const session = await getServerSession(authOptions);
-  if (!session) redirect("/employee/signin");
-
   const { configId } = await params;
   const config = await fetchConfigById(configId);
   if (!config) notFound();

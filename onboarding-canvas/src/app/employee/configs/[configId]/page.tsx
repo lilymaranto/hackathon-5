@@ -1,18 +1,8 @@
 import { CanvasBoard } from "@/components/CanvasBoard";
-import { authOptions } from "@/lib/auth-options";
 import { formatConfigPlanHeading } from "@/lib/constants";
-import { ConfigRecord, TileRecord } from "@/lib/types";
-import { getServerSession } from "next-auth";
+import { fetchConfigById } from "@/lib/caboodle";
+import { TileRecord } from "@/lib/types";
 import { notFound } from "next/navigation";
-import { redirect } from "next/navigation";
-
-async function getConfigs() {
-  const baseUrl = process.env.AUTH_URL || "http://localhost:3000";
-  const response = await fetch(`${baseUrl}/api/configs`, { cache: "no-store" });
-  if (!response.ok) return [];
-  const payload = (await response.json()) as { data?: ConfigRecord[] };
-  return payload.data ?? [];
-}
 
 async function getTiles(configId: string) {
   const baseUrl = process.env.AUTH_URL || "http://localhost:3000";
@@ -29,12 +19,8 @@ export default async function EmployeeConfigPage({
 }: {
   params: Promise<{ configId: string }>;
 }) {
-  const session = await getServerSession(authOptions);
-  if (!session) redirect("/employee/signin");
-
   const { configId } = await params;
-  const configs = await getConfigs();
-  const config = configs.find((item) => item.Config_ID === configId);
+  const config = await fetchConfigById(configId);
   if (!config) notFound();
   const tiles = await getTiles(configId);
   const planTitle = formatConfigPlanHeading(config);

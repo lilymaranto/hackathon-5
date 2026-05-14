@@ -12,6 +12,7 @@ import {
   Pencil,
   Trash2,
   FileInput,
+  CopyPlus,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -33,6 +34,8 @@ export function ConfigsTable({ configs }: Props) {
   const [exportingId, setExportingId] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportDone, setExportDone] = useState<{ url: string; title: string } | null>(null);
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
+  const [duplicateError, setDuplicateError] = useState<string | null>(null);
 
   async function copy(value: string) {
     await navigator.clipboard.writeText(value);
@@ -75,6 +78,27 @@ export function ConfigsTable({ configs }: Props) {
     }
   }
 
+  async function duplicateConfigRow(config: ConfigRecord) {
+    setDuplicateError(null);
+    setDuplicatingId(config.Config_ID);
+    try {
+      const response = await fetch(
+        `/api/configs/${encodeURIComponent(config.Config_ID)}/duplicate`,
+        { method: "POST" },
+      );
+      const payload = (await response.json()) as { data?: ConfigRecord; error?: string };
+      if (!response.ok) {
+        setDuplicateError(payload.error ?? "Unable to duplicate config.");
+        return;
+      }
+      router.refresh();
+    } catch {
+      setDuplicateError("Network error while duplicating. Try again.");
+    } finally {
+      setDuplicatingId(null);
+    }
+  }
+
   async function runExport(config: ConfigRecord) {
     setExportError(null);
     setExportingId(config.Config_ID);
@@ -104,12 +128,17 @@ export function ConfigsTable({ configs }: Props) {
 
   return (
     <>
+      {duplicateError && (
+        <p className="mb-3 rounded-lg bg-[#fff1f4] px-3 py-2 text-sm text-[#b5334d]" role="alert">
+          {duplicateError}
+        </p>
+      )}
       <div className="overflow-hidden rounded-2xl border border-[#d7ccf6] bg-white shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-left text-base">
             <thead className="bg-[#f6efff] text-left text-[#2c1650]">
               <tr>
-                <th className="px-3 py-3">Title</th>
+                <th className="px-3 py-3">Prospect name</th>
                 <th className="px-3 py-3">Industry</th>
                 <th className="px-3 py-3">Plan Package</th>
                 <th className="px-3 py-3">Actions</th>
@@ -118,13 +147,14 @@ export function ConfigsTable({ configs }: Props) {
             <tbody>
               {configs.map((config) => {
                 const isDeleting = deletingId === config.Config_ID;
+                const isDuplicating = duplicatingId === config.Config_ID;
                 const isExporting = exportingId === config.Config_ID;
                 const docUrl = config.handoffDocUrl?.trim();
                 return (
                   <tr
                     key={config.Config_ID}
-                    className={`border-t border-[#ebe4ff] ${isDeleting ? "bg-[#faf8ff]" : ""}`}
-                    aria-busy={isDeleting}
+                    className={`border-t border-[#ebe4ff] ${isDeleting || isDuplicating ? "bg-[#faf8ff]" : ""}`}
+                    aria-busy={isDeleting || isDuplicating}
                   >
                     <td className="px-3 py-3 font-medium">{config.Title}</td>
                     <td className="px-3 py-3">{config.Industry}</td>
@@ -176,7 +206,7 @@ export function ConfigsTable({ configs }: Props) {
                             setExportError(null);
                             setExportConfirm(config);
                           }}
-                          className="rounded-md border border-[#c9e8d4] p-2.5 text-[#1f6b3f] transition hover:bg-[#ecfdf3] disabled:pointer-events-none disabled:opacity-50"
+                          className="rounded-md border border-[#c9e8d4] p-2.5 text-[#1f6b3f] transition-none hover:bg-[#ecfdf3] disabled:pointer-events-none disabled:opacity-50"
                         >
                           {isExporting ? (
                             <Loader2 size={18} className="animate-spin" aria-hidden />
@@ -195,7 +225,7 @@ export function ConfigsTable({ configs }: Props) {
                           disabled={isDeleting || !docUrl}
                           onClick={() => docUrl && window.open(docUrl, "_blank", "noopener,noreferrer")}
                           className={[
-                            "relative inline-flex rounded-md border p-2.5 transition",
+                            "relative inline-flex rounded-md border p-2.5 transition-none",
                             docUrl
                               ? "border-[#d4c9f6] text-[#4a2b7a] hover:bg-[#f2e8ff]"
                               : "cursor-not-allowed border-[#e8e4f0] text-[#b8b0c9]",
@@ -207,6 +237,25 @@ export function ConfigsTable({ configs }: Props) {
                             className="absolute -bottom-0.5 -right-0.5 rounded-sm bg-white text-[#801ED7] ring-1 ring-[#e8e4f0]"
                             aria-hidden
                           />
+                        </button>
+                        <button
+                          type="button"
+                          title="Duplicate this account: copy settings and all timeline tiles (new guest password)"
+                          aria-label="Duplicate this account: copy settings and all timeline tiles"
+                          disabled={
+                            isDeleting ||
+                            !!duplicatingId ||
+                            isExporting ||
+                            status !== "authenticated"
+                          }
+                          onClick={() => void duplicateConfigRow(config)}
+                          className="rounded-md border border-[#d4c9f6] p-2.5 text-[#4a2b7a] hover:bg-[#f2e8ff] disabled:pointer-events-none disabled:opacity-50"
+                        >
+                          {isDuplicating ? (
+                            <Loader2 size={18} className="animate-spin" aria-hidden />
+                          ) : (
+                            <CopyPlus size={18} aria-hidden />
+                          )}
                         </button>
                         <button
                           type="button"

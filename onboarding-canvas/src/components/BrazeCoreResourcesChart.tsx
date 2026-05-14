@@ -2,6 +2,7 @@
 
 import {
   BRAZE_RESOURCE_ROW_ID_PREFIX,
+  BRAZE_RESOURCES_CHART_SECTION_ID,
   filterGrowthSilverRows,
   filterStandardBrazeRows,
   GROWTH_SILVER_RESOURCE_ROWS,
@@ -263,7 +264,7 @@ export function BrazeCoreResourcesChart({
   const title = isGrowthSilver ? "Recommended Resources:" : "Roles & Responsibilities";
 
   return (
-    <div>
+    <div id={BRAZE_RESOURCES_CHART_SECTION_ID} className="scroll-mt-24">
       <h3 className="text-center text-[24px] font-semibold leading-tight text-[#2c1650]">{title}</h3>
       <div className="mt-6">
         {isGrowthSilver ? (

@@ -1,6 +1,7 @@
 import { authOptions } from "@/lib/auth-options";
 import { createConfigWithSeed, fetchConfigs } from "@/lib/caboodle";
 import { parsePlanOptionId } from "@/lib/constants";
+import { parseHexColorOptional } from "@/lib/tile-category-colors";
 import { getServerSession } from "next-auth";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -54,6 +55,11 @@ export async function POST(request: NextRequest) {
         | "Other";
       planOptionId?: string;
       password?: string;
+      onboardingSessionTileColor?: string;
+      customerActivityTileColor?: string;
+      buttonColor?: string;
+      workstreamGradientTopColor?: string;
+      workstreamGradientBottomColor?: string;
       channels?: {
         email?: boolean;
         sms?: boolean;
@@ -88,6 +94,49 @@ export async function POST(request: NextRequest) {
         ? "ai_decisioning_studio"
         : parsedPlan ?? "12_week";
 
+    const ob = body.onboardingSessionTileColor?.trim() ?? "";
+    const cb = body.customerActivityTileColor?.trim() ?? "";
+    const btnRaw = body.buttonColor?.trim() ?? "";
+    const buttonHex = btnRaw ? parseHexColorOptional(btnRaw) : undefined;
+    if (btnRaw && !buttonHex) {
+      return NextResponse.json(
+        { error: "Invalid buttonColor: use hex like #801ed7." },
+        { status: 400 },
+      );
+    }
+
+    const onboardingHex = ob ? parseHexColorOptional(ob) : undefined;
+    const customerHex = cb ? parseHexColorOptional(cb) : undefined;
+    if (ob && !onboardingHex) {
+      return NextResponse.json(
+        { error: "Invalid onboardingSessionTileColor: use hex like #300266." },
+        { status: 400 },
+      );
+    }
+    if (cb && !customerHex) {
+      return NextResponse.json(
+        { error: "Invalid customerActivityTileColor: use hex like #c9c4ef." },
+        { status: 400 },
+      );
+    }
+
+    const wst = body.workstreamGradientTopColor?.trim() ?? "";
+    const wsb = body.workstreamGradientBottomColor?.trim() ?? "";
+    const wsTopHex = wst ? parseHexColorOptional(wst) : undefined;
+    const wsBottomHex = wsb ? parseHexColorOptional(wsb) : undefined;
+    if (wst && !wsTopHex) {
+      return NextResponse.json(
+        { error: "Invalid workstreamGradientTopColor: use hex like #300266." },
+        { status: 400 },
+      );
+    }
+    if (wsb && !wsBottomHex) {
+      return NextResponse.json(
+        { error: "Invalid workstreamGradientBottomColor: use hex like #801ed7." },
+        { status: 400 },
+      );
+    }
+
     const created = await createConfigWithSeed({
       title: body.title,
       productType: body.productType,
@@ -96,6 +145,11 @@ export async function POST(request: NextRequest) {
       password: body.password,
       createdBy: creatorEmail,
       channels,
+      ...(onboardingHex ? { onboardingSessionTileColor: onboardingHex } : {}),
+      ...(customerHex ? { customerActivityTileColor: customerHex } : {}),
+      ...(buttonHex ? { buttonColor: buttonHex } : {}),
+      ...(wsTopHex ? { workstreamGradientTopColor: wsTopHex } : {}),
+      ...(wsBottomHex ? { workstreamGradientBottomColor: wsBottomHex } : {}),
     });
 
     return NextResponse.json({ data: created });

@@ -1,7 +1,9 @@
 "use client";
 
 import { BrazeCoreSpanResizeHandle } from "@/components/BrazeCoreSpanResizeHandle";
+import { TimelineAnnotationsShell } from "@/components/TimelineAnnotationsShell";
 import {
+  BRAZE_CORE_GANTT_EXPANDED_FIRST_ROW_CHROME_PX,
   GANTT_ROW_TOP_PAD_PX,
   GANTT_TASK_BAR_HEIGHT_PX,
   GANTT_TASK_BAR_LANE_GAP_PX,
@@ -9,14 +11,28 @@ import {
 } from "@/lib/canvas-layout-y";
 import { GROWTH_SILVER_COLUMNS_PER_WEEK, WORKSTREAMS } from "@/lib/constants";
 import { getTileTimelineUnits } from "@/lib/timeline-units";
+import type { TimelineAnnotationDocument } from "@/lib/timeline-annotations";
+import { timelineColumnFromClientX } from "@/lib/timeline-annotations";
 import type { TimelineConfig } from "@/lib/templates";
-import type { PlanOptionId, TileRecord, Workstream } from "@/lib/types";
+import {
+  darkerOfTwoHexes,
+  milestoneAccentHexFromConfig,
+  parseHexColorOptional,
+  resolveTileCategoryColorsFromConfig,
+  textColorOnTileBackground,
+  type ResolvedTileCategoryColors,
+} from "@/lib/tile-category-colors";
+import {
+  labelHexForWorkstreamTextType,
+  workstreamLabelTextTypeFromRailHex,
+} from "@/lib/braze-workstream-order";
+import type { ConfigRecord, PlanOptionId, TileRecord, Workstream, WorkstreamLabelTextType } from "@/lib/types";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import clsx from "clsx";
-import { Star } from "lucide-react";
+import { ChevronDown, ChevronRight, Star } from "lucide-react";
 import type { CSSProperties, ReactNode, Ref } from "react";
-import { Fragment, useMemo } from "react";
+import { Fragment, useCallback, useMemo, useRef, useState } from "react";
 
 const GANTT_GUIDE_COLOR = "rgba(232, 229, 248, 0.95)";
 
@@ -131,10 +147,36 @@ export type BrazeCoreGanttChartProps = {
    * Use with {@link matchAiDecisioningSwimlaneBars} for AI Decisioning Studio.
    */
   laneLegend?: ReadonlyArray<{ id: Workstream; label: string; color: string }>;
-  /** Second legend row heading (default `Workstreams`). */
+  /** Second legend row (Braze Core Gantt): heading above workstream color swatches. Default `Workstreams`. */
   laneLegendTitle?: string;
   /** AI Decisioning: Gantt bars + key match swimlane (lavender activities, violet milestones). */
   matchAiDecisioningSwimlaneBars?: boolean;
+  /**
+   * Config-driven onboarding / customer fills. Used for AI Decisioning Gantt bars and key when
+   * {@link matchAiDecisioningSwimlaneBars} is true; also for Braze Core Gantt **category** legend swatches
+   * (bars stay channel-colored). Omit to use defaults.
+   */
+  aiDecisioningCategoryColors?: Pick<
+    ConfigRecord,
+    "onboardingSessionTileColor" | "customerActivityTileColor"
+  >;
+  /** Braze Core: per-workstream rail / bar hue overrides (e.g. config gradient). Ignored when {@link laneLegend} is set. */
+  workstreamLaneColorOverrides?: ReadonlyMap<Workstream, string>;
+  /**
+   * Legend copy: replaces “Customer” in activity / combo key labels (use config `Title` / prospect name).
+   * Falls back to “Prospect” when empty.
+   */
+  legendProspectLabel?: string;
+  /** Braze Core: saved label contrast per workstream (`b` / `w`); collapsed + expanded left rails. */
+  workstreamLabelTextTypeById?: ReadonlyMap<Workstream, WorkstreamLabelTextType>;
+  /** Braze Core: double-click workstream title in collapsed row to flip `b`/`w` and persist (parent PATCH). */
+  onWorkstreamLabelTextDoubleClick?: (workstream: Workstream) => void;
+  /** Double-click timeline header rail: column index 1…timelineColumns (new marker). */
+  onAppendTimelineAnnotationAtColumn?: (column: number) => void;
+  timelineAnnotation?: TimelineAnnotationDocument;
+  onTimelineAnnotationChange?: (doc: TimelineAnnotationDocument) => void;
+  /** After a marker title commit (Enter / blur / click-away); parent may flush PATCH immediately. */
+  onAfterAnnotationTitleCommit?: () => void;
 };
 
 /** Must match {@link CanvasBoard} `tileStableKey` for shared DnD ids. */
@@ -148,6 +190,8 @@ const WEEKLY_ALIGNMENT_TILE_ID = "weekly_alignment";
 /** Campaign: optional phase 2 is always its own row (after phase 1 + milestone block). */
 const CAMPAIGN_PHASE_2_TILE_IDS = new Set(["launch_phase_2", "phase_2_optional"]);
 
+const DEFAULT_BRAZE_GANTT_LANE_ORDER: readonly Workstream[] = WORKSTREAMS.map((w) => w.id);
+
 function tileKey(tile: TileRecord): string {
   return tile.CaboodlePatchKey ?? `${tile.Config_ID}__${tile.Tile_ID}`;
 }
@@ -159,9 +203,12 @@ function brazeWorkstreamColor(workstreamId: Workstream): string {
 function resolveWorkstreamColor(
   workstreamId: Workstream,
   laneLegend: ReadonlyArray<{ id: Workstream; label: string; color: string }> | undefined,
+  laneColorOverrides: ReadonlyMap<Workstream, string> | undefined,
 ): string {
   const fromLegend = laneLegend?.find((l) => l.id === workstreamId)?.color;
   if (fromLegend) return fromLegend;
+  const fromOverrides = laneColorOverrides?.get(workstreamId);
+  if (fromOverrides) return fromOverrides;
   return brazeWorkstreamColor(workstreamId);
 }
 
@@ -176,7 +223,10 @@ function sortTilesForWorkstream(a: TileRecord, b: TileRecord): number {
  * weekly_alignment is always its own top row and never receives merged milestones.
  * Campaign Launch Phase 2 (optional) is excluded from merging and rendered as its own row after the rest.
  */
-function buildGanttRowsByWorkstream(tiles: TileRecord[]): TileRecord[][] {
+function buildGanttRowsByWorkstream(
+  tiles: TileRecord[],
+  laneOrder: readonly Workstream[] = DEFAULT_BRAZE_GANTT_LANE_ORDER,
+): TileRecord[][] {
   const byWs = new Map<Workstream, TileRecord[]>();
   for (const t of tiles) {
     const list = byWs.get(t.Workstream) ?? [];
@@ -186,7 +236,9 @@ function buildGanttRowsByWorkstream(tiles: TileRecord[]): TileRecord[][] {
 
   const out: TileRecord[][] = [];
 
-  for (const ws of WORKSTREAMS) {
+  for (const wsId of laneOrder) {
+    const ws = WORKSTREAMS.find((w) => w.id === wsId);
+    if (!ws) continue;
     const wsTiles = byWs.get(ws.id);
     if (!wsTiles?.length) continue;
 
@@ -233,6 +285,20 @@ function buildGanttRowsByWorkstream(tiles: TileRecord[]): TileRecord[][] {
   return out;
 }
 
+/** Consecutive Gantt rows with the same workstream → one collapsible section (Braze Core). */
+function groupBrazeGanttRowsByWorkstream(
+  rows: TileRecord[][],
+): { workstream: Workstream; rows: TileRecord[][] }[] {
+  const out: { workstream: Workstream; rows: TileRecord[][] }[] = [];
+  for (const rowTiles of rows) {
+    const ws = rowTiles[0]!.Workstream;
+    const tail = out[out.length - 1];
+    if (tail && tail.workstream === ws) tail.rows.push(rowTiles);
+    else out.push({ workstream: ws, rows: [rowTiles] });
+  }
+  return out;
+}
+
 /** Same milestone-merge rules as {@link buildGanttRowsByWorkstream}, but scoped per lane (no cross-lane merge). */
 function buildGanttRowsByLaneOrder(
   tiles: TileRecord[],
@@ -273,12 +339,6 @@ function buildGanttRowsByLaneOrder(
 }
 
 const ADS_GANTT_MILESTONE_ACCENT = "#801ED7";
-const ADS_GANTT_CUSTOMER_BG = "#C9C4EF";
-const ADS_GANTT_CUSTOMER_TEXT = "#300266";
-/** AI Gantt left rail + onboarding tiles — align with swimlane {@link CanvasBoard} `tileClass`. */
-const ADS_GANTT_LEFT_RAIL_CUSTOMER_BG = "#C9C4EF";
-const ADS_GANTT_LEFT_RAIL_ONBOARDING_BG = "#300266";
-const ADS_GANTT_ONBOARDING_TILE_BG = "#300266";
 
 function assignLanesInRow(
   tiles: TileRecord[],
@@ -317,6 +377,55 @@ function assignLanesInRow(
   return result;
 }
 
+/**
+ * Braze collapsed Gantt: merge consecutive or touching customer-activity intervals on each lane
+ * into one visual bar (single rounded rectangle).
+ */
+function mergeAdjacentCustomerActivitySegments(
+  laneAssigned: { tile: TileRecord; lane: number }[],
+  planOptionId: PlanOptionId,
+  durationWeeks: number,
+): { lane: number; startUnit: number; endUnit: number; tiles: TileRecord[] }[] {
+  const units = (tile: TileRecord) => getTileTimelineUnits(planOptionId, tile, durationWeeks);
+  const byLane = new Map<number, TileRecord[]>();
+  for (const { tile, lane } of laneAssigned) {
+    const list = byLane.get(lane) ?? [];
+    list.push(tile);
+    byLane.set(lane, list);
+  }
+  const out: { lane: number; startUnit: number; endUnit: number; tiles: TileRecord[] }[] = [];
+  for (const [lane, laneTiles] of byLane) {
+    const sorted = [...laneTiles].sort((a, b) => units(a).startUnit - units(b).startUnit);
+    let group: TileRecord[] = [];
+    let gStart = 0;
+    let gEnd = 0;
+    const flush = () => {
+      if (group.length > 0) {
+        out.push({ lane, startUnit: gStart, endUnit: gEnd, tiles: group });
+        group = [];
+      }
+    };
+    for (const tile of sorted) {
+      const tu = units(tile);
+      if (group.length === 0) {
+        group = [tile];
+        gStart = tu.startUnit;
+        gEnd = tu.endUnit;
+      } else if (tu.startUnit <= gEnd + 1) {
+        group.push(tile);
+        gEnd = Math.max(gEnd, tu.endUnit);
+      } else {
+        flush();
+        group = [tile];
+        gStart = tu.startUnit;
+        gEnd = tu.endUnit;
+      }
+    }
+    flush();
+  }
+  return out.sort((a, b) => (a.lane !== b.lane ? a.lane - b.lane : a.startUnit - b.startUnit));
+}
+
 function rowTimelineMinHeightPx(maxLane: number): number {
   const lanes = maxLane + 1;
   return (
@@ -344,7 +453,7 @@ function GanttRowTimelineRailStatic({
 }) {
   return (
     <div
-      className="relative bg-white"
+      className="relative z-10 bg-transparent"
       style={ganttRowRailStyle(minHeight, timelineGuideStyle)}
     >
       {children}
@@ -367,7 +476,7 @@ function GanttRowTimelineRailDroppable({
   return (
     <div
       ref={setNodeRef}
-      className="relative bg-white"
+      className="relative z-10 bg-transparent"
       style={ganttRowRailStyle(minHeight, timelineGuideStyle)}
     >
       {children}
@@ -379,6 +488,8 @@ function GanttTaskBarDraggable({
   tile,
   workstreamHue,
   matchAiDecisioningSwimlaneBars,
+  adsTileCategoryColors,
+  categoryMilestoneFill,
   leftPct,
   widthPct,
   topPx,
@@ -387,13 +498,19 @@ function GanttTaskBarDraggable({
   tile: TileRecord;
   workstreamHue: string;
   matchAiDecisioningSwimlaneBars?: boolean;
+  /** Used only when {@link matchAiDecisioningSwimlaneBars} styles ADS category bars. */
+  adsTileCategoryColors: ResolvedTileCategoryColors;
+  /** When set (custom onboarding/customer colors), milestone bars use this instead of lane violet / workstream hue. */
+  categoryMilestoneFill?: string;
   leftPct: number;
   widthPct: number;
   topPx: number;
   onOpen: () => void;
 }) {
   const cat = tile.Category;
-  const milestoneFill = matchAiDecisioningSwimlaneBars ? ADS_GANTT_MILESTONE_ACCENT : workstreamHue;
+  const milestoneFill =
+    categoryMilestoneFill ??
+    (matchAiDecisioningSwimlaneBars ? ADS_GANTT_MILESTONE_ACCENT : workstreamHue);
   const activityLaneFill = workstreamHue;
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: tileStableKey(tile),
@@ -410,24 +527,25 @@ function GanttTaskBarDraggable({
 
   const barTextClass = matchAiDecisioningSwimlaneBars ? "text-[11px]" : "text-[9px]";
   const common = clsx(
-    "absolute flex items-center justify-center gap-1 overflow-hidden rounded-md px-1.5 text-center font-medium leading-tight shadow-sm",
+    "absolute z-[30] flex items-center justify-center gap-1 overflow-hidden rounded-md px-1.5 text-center font-medium leading-tight shadow-sm",
     barTextClass,
   );
   const grabClass = cat !== "milestone" ? "cursor-grab active:cursor-grabbing" : "";
-  const draggingClass = isDragging ? "z-20 opacity-80" : "";
+  const draggingClass = isDragging ? "z-[45] opacity-80" : "";
 
   if (cat === "onboarding_session" && matchAiDecisioningSwimlaneBars) {
+    const ob = adsTileCategoryColors.onboardingBg;
     return (
       <button
         ref={setNodeRef}
         type="button"
         aria-label={tile.Title}
         title={tile.Title}
-        className={clsx(common, "border-0 text-white", grabClass, draggingClass)}
+        className={clsx(common, "border-0", grabClass, draggingClass)}
         style={{
           ...posStyle,
-          backgroundColor: ADS_GANTT_ONBOARDING_TILE_BG,
-          color: "#ffffff",
+          backgroundColor: ob,
+          color: textColorOnTileBackground(ob),
         }}
         onClick={onOpen}
         {...listeners}
@@ -458,6 +576,7 @@ function GanttTaskBarDraggable({
   }
 
   if (cat === "customer_activity" && matchAiDecisioningSwimlaneBars) {
+    const cb = adsTileCategoryColors.customerBg;
     return (
       <button
         ref={setNodeRef}
@@ -467,8 +586,8 @@ function GanttTaskBarDraggable({
         className={clsx(common, "border-0", grabClass, draggingClass)}
         style={{
           ...posStyle,
-          backgroundColor: ADS_GANTT_CUSTOMER_BG,
-          color: ADS_GANTT_CUSTOMER_TEXT,
+          backgroundColor: cb,
+          color: textColorOnTileBackground(cb),
         }}
         onClick={onOpen}
         {...listeners}
@@ -486,7 +605,7 @@ function GanttTaskBarDraggable({
         type="button"
         aria-label={tile.Title}
         className={clsx(
-          "absolute z-[5] flex items-center justify-center gap-0.5 overflow-hidden rounded-md px-1 text-center font-semibold leading-tight shadow-sm border-2 bg-white",
+          "absolute z-[30] flex items-center justify-center gap-0.5 overflow-hidden rounded-md px-1 text-center font-semibold leading-tight shadow-sm border-2 bg-white",
           milestoneBarText,
           draggingClass,
         )}
@@ -515,16 +634,19 @@ function GanttTaskBarDraggable({
   }
 
   if (cat === "customer_activity") {
+    const fill = activityLaneFill;
+    const fg = textColorOnTileBackground(fill);
     return (
       <button
         ref={setNodeRef}
         type="button"
         aria-label={tile.Title}
         title={tile.Title}
-        className={clsx(common, "border-0 text-white", grabClass, draggingClass)}
+        className={clsx(common, "border-0", grabClass, draggingClass)}
         style={{
           ...posStyle,
-          backgroundColor: activityLaneFill,
+          backgroundColor: fill,
+          color: fg,
         }}
         onClick={onOpen}
         {...listeners}
@@ -538,10 +660,11 @@ function GanttTaskBarDraggable({
       ref={setNodeRef}
       type="button"
       aria-label={tile.Title}
-      className={clsx(common, "border-0 text-white", grabClass, draggingClass)}
+      className={clsx(common, "border-0", grabClass, draggingClass)}
       style={{
         ...posStyle,
         backgroundColor: activityLaneFill,
+        color: textColorOnTileBackground(activityLaneFill),
       }}
       onClick={onOpen}
       {...listeners}
@@ -557,6 +680,8 @@ function GanttTaskBarStatic({
   tile,
   workstreamHue,
   matchAiDecisioningSwimlaneBars,
+  adsTileCategoryColors,
+  categoryMilestoneFill,
   leftPct,
   widthPct,
   topPx,
@@ -565,13 +690,17 @@ function GanttTaskBarStatic({
   tile: TileRecord;
   workstreamHue: string;
   matchAiDecisioningSwimlaneBars?: boolean;
+  adsTileCategoryColors: ResolvedTileCategoryColors;
+  categoryMilestoneFill?: string;
   leftPct: number;
   widthPct: number;
   topPx: number;
   onOpen: () => void;
 }) {
   const cat = tile.Category;
-  const milestoneFill = matchAiDecisioningSwimlaneBars ? ADS_GANTT_MILESTONE_ACCENT : workstreamHue;
+  const milestoneFill =
+    categoryMilestoneFill ??
+    (matchAiDecisioningSwimlaneBars ? ADS_GANTT_MILESTONE_ACCENT : workstreamHue);
   const activityLaneFill = workstreamHue;
   const posStyle: CSSProperties = {
     left: `${leftPct}%`,
@@ -582,21 +711,22 @@ function GanttTaskBarStatic({
   };
   const barTextClass = matchAiDecisioningSwimlaneBars ? "text-[11px]" : "text-[9px]";
   const common = clsx(
-    "absolute flex items-center justify-center gap-1 overflow-hidden rounded-md px-1.5 text-center font-medium leading-tight shadow-sm",
+    "absolute z-[30] flex items-center justify-center gap-1 overflow-hidden rounded-md px-1.5 text-center font-medium leading-tight shadow-sm",
     barTextClass,
   );
 
   if (cat === "onboarding_session" && matchAiDecisioningSwimlaneBars) {
+    const ob = adsTileCategoryColors.onboardingBg;
     return (
       <button
         type="button"
         aria-label={tile.Title}
         title={tile.Title}
-        className={clsx(common, "border-0 text-white")}
+        className={clsx(common, "border-0")}
         style={{
           ...posStyle,
-          backgroundColor: ADS_GANTT_ONBOARDING_TILE_BG,
-          color: "#ffffff",
+          backgroundColor: ob,
+          color: textColorOnTileBackground(ob),
         }}
         onClick={onOpen}
       />
@@ -622,6 +752,7 @@ function GanttTaskBarStatic({
   }
 
   if (cat === "customer_activity" && matchAiDecisioningSwimlaneBars) {
+    const cb = adsTileCategoryColors.customerBg;
     return (
       <button
         type="button"
@@ -630,8 +761,8 @@ function GanttTaskBarStatic({
         className={clsx(common, "border-0")}
         style={{
           ...posStyle,
-          backgroundColor: ADS_GANTT_CUSTOMER_BG,
-          color: ADS_GANTT_CUSTOMER_TEXT,
+          backgroundColor: cb,
+          color: textColorOnTileBackground(cb),
         }}
         onClick={onOpen}
       />
@@ -645,7 +776,7 @@ function GanttTaskBarStatic({
         type="button"
         aria-label={tile.Title}
         className={clsx(
-          "absolute z-[5] flex items-center justify-center gap-0.5 overflow-hidden rounded-md px-1 text-center font-semibold leading-tight shadow-sm border-2 bg-white",
+          "absolute z-[30] flex items-center justify-center gap-0.5 overflow-hidden rounded-md px-1 text-center font-semibold leading-tight shadow-sm border-2 bg-white",
           milestoneBarText,
         )}
         style={{
@@ -671,15 +802,18 @@ function GanttTaskBarStatic({
   }
 
   if (cat === "customer_activity") {
+    const fill = activityLaneFill;
+    const fg = textColorOnTileBackground(fill);
     return (
       <button
         type="button"
         aria-label={tile.Title}
         title={tile.Title}
-        className={clsx(common, "border-0 text-white")}
+        className={clsx(common, "border-0")}
         style={{
           ...posStyle,
-          backgroundColor: activityLaneFill,
+          backgroundColor: fill,
+          color: fg,
         }}
         onClick={onOpen}
       />
@@ -690,15 +824,212 @@ function GanttTaskBarStatic({
     <button
       type="button"
       aria-label={tile.Title}
-      className={clsx(common, "border-0 text-white")}
+      className={clsx(common, "border-0")}
       style={{
         ...posStyle,
         backgroundColor: activityLaneFill,
+        color: textColorOnTileBackground(activityLaneFill),
       }}
       onClick={onOpen}
     >
       <span className="line-clamp-2 w-full">{tile.Title}</span>
     </button>
+  );
+}
+
+type BrazeCoreGanttActivityRowProps = {
+  rowTiles: TileRecord[];
+  laneLegend: ReadonlyArray<{ id: Workstream; label: string; color: string }> | undefined;
+  workstreamLaneColorOverrides: ReadonlyMap<Workstream, string> | undefined;
+  planOptionId: PlanOptionId;
+  durationWeeks: number;
+  timelineColumns: number;
+  readOnly: boolean;
+  onOpenTile: (tile: TileRecord) => void;
+  matchAiDecisioningSwimlaneBars: boolean;
+  adsTileCategoryColors: ResolvedTileCategoryColors;
+  categoryMilestoneFill: string | undefined;
+  timelineGuideStyle: CSSProperties | undefined;
+  spanResize: BrazeCoreGanttSpanResizeProps | undefined;
+  /** Prepended above activity title buttons (e.g. non–Braze-Core expand chrome). */
+  leftRailExtra?: ReactNode;
+  /**
+   * Braze Core only: first row of an expanded workstream — workstream label left of collapse chevron,
+   * divider, then activity titles; timeline bars offset to align with titles.
+   */
+  brazeExpandedFirstRowChrome?: {
+    label: string;
+    onCollapse: () => void;
+    onLabelDoubleClick?: () => void;
+  };
+  workstreamLabelTextTypeById?: ReadonlyMap<Workstream, WorkstreamLabelTextType>;
+};
+
+function BrazeCoreGanttActivityRow({
+  rowTiles,
+  laneLegend,
+  workstreamLaneColorOverrides,
+  planOptionId,
+  durationWeeks,
+  timelineColumns,
+  readOnly,
+  onOpenTile,
+  matchAiDecisioningSwimlaneBars,
+  adsTileCategoryColors,
+  categoryMilestoneFill,
+  timelineGuideStyle,
+  spanResize,
+  leftRailExtra,
+  brazeExpandedFirstRowChrome,
+  workstreamLabelTextTypeById,
+}: BrazeCoreGanttActivityRowProps) {
+  const wsId = rowTiles[0]!.Workstream;
+  const color = resolveWorkstreamColor(wsId, laneLegend, workstreamLaneColorOverrides);
+  const laneAssigned = assignLanesInRow(rowTiles, planOptionId, durationWeeks);
+  const maxLane = laneAssigned.reduce((m, x) => Math.max(m, x.lane), 0);
+  const barYOffset = brazeExpandedFirstRowChrome ? BRAZE_CORE_GANTT_EXPANDED_FIRST_ROW_CHROME_PX : 0;
+  const rowMinH = rowTimelineMinHeightPx(maxLane) + barYOffset;
+
+  const titleOrder = [...rowTiles]
+    .filter((t) => t.Category !== "milestone")
+    .sort(sortTilesForWorkstream);
+
+  const primaryTile =
+    titleOrder.find((t) => t.Category === "onboarding_session") ??
+    titleOrder.find((t) => t.Category === "customer_activity");
+  const leftRailBg = matchAiDecisioningSwimlaneBars
+    ? primaryTile?.Category === "onboarding_session"
+      ? adsTileCategoryColors.onboardingBg
+      : adsTileCategoryColors.customerBg
+    : color;
+  const leftRailLabelColor = matchAiDecisioningSwimlaneBars
+    ? primaryTile?.Category === "onboarding_session"
+      ? textColorOnTileBackground(adsTileCategoryColors.onboardingBg)
+      : textColorOnTileBackground(adsTileCategoryColors.customerBg)
+    : workstreamLabelTextTypeById?.has(wsId)
+      ? labelHexForWorkstreamTextType(workstreamLabelTextTypeById.get(wsId)!)
+      : textColorOnTileBackground(leftRailBg);
+
+  const TaskBar = readOnly ? GanttTaskBarStatic : GanttTaskBarDraggable;
+  const bars = laneAssigned.map(({ tile, lane }) => {
+    const tu = getTileTimelineUnits(planOptionId, tile, durationWeeks);
+    const spanUnits = tu.endUnit - tu.startUnit + 1;
+    const leftPct = ((tu.startUnit - 1) / timelineColumns) * 100;
+    const widthPct = (spanUnits / timelineColumns) * 100;
+    const topPx =
+      GANTT_ROW_TOP_PAD_PX +
+      barYOffset +
+      lane * (GANTT_TASK_BAR_HEIGHT_PX + GANTT_TASK_BAR_LANE_GAP_PX);
+    const frameStyle: CSSProperties = {
+      position: "absolute",
+      left: `${leftPct}%`,
+      width: `${Math.max(widthPct, 0.4)}%`,
+      minWidth: 4,
+      top: topPx,
+      height: GANTT_TASK_BAR_HEIGHT_PX,
+    };
+    return (
+      <Fragment key={tileKey(tile)}>
+        <TaskBar
+          tile={tile}
+          workstreamHue={color}
+          matchAiDecisioningSwimlaneBars={matchAiDecisioningSwimlaneBars}
+          adsTileCategoryColors={adsTileCategoryColors}
+          categoryMilestoneFill={categoryMilestoneFill}
+          leftPct={leftPct}
+          widthPct={widthPct}
+          topPx={topPx}
+          onOpen={() => onOpenTile(tile)}
+        />
+        {spanResize && !readOnly && tile.Category !== "milestone" ? (
+          <div className="pointer-events-none" style={frameStyle}>
+            <BrazeCoreSpanResizeHandle
+              tile={tile}
+              planOptionId={spanResize.planOptionId}
+              durationWeeks={spanResize.durationWeeks}
+              timelineColumns={spanResize.timelineColumns}
+              templateSpanWeeks={spanResize.templateSpanWeeksForTile(tile)}
+              getTimelineWidthPx={spanResize.getTimelineWidthPx}
+              onSpanChange={(span) => spanResize.onSpanChange(tile, span)}
+              heightClass="h-8"
+              mode={spanResize.spanResizeMode ?? "braze"}
+              handleHeightPx={spanResize.spanResizeHandleHeightPx ?? GANTT_TASK_BAR_HEIGHT_PX}
+            />
+          </div>
+        ) : null}
+      </Fragment>
+    );
+  });
+
+  const rail =
+    readOnly ? (
+      <GanttRowTimelineRailStatic minHeight={rowMinH} timelineGuideStyle={timelineGuideStyle}>
+        {bars}
+      </GanttRowTimelineRailStatic>
+    ) : (
+      <GanttRowTimelineRailDroppable
+        workstream={wsId}
+        minHeight={rowMinH}
+        timelineGuideStyle={timelineGuideStyle}
+      >
+        {bars}
+      </GanttRowTimelineRailDroppable>
+    );
+
+  return (
+    <div className="grid grid-cols-[minmax(12rem,16rem)_1fr] border-b border-[#ebe4ff]">
+      <div
+        className={clsx(
+          "flex flex-col border-r border-[#E8E5F8] px-3 py-1",
+          brazeExpandedFirstRowChrome ? "justify-start gap-1" : "justify-center gap-1",
+        )}
+        style={{ backgroundColor: leftRailBg }}
+      >
+        {brazeExpandedFirstRowChrome ? (
+          <>
+            <div className="flex w-full min-w-0 items-center gap-2">
+              <span
+                className="min-w-0 flex-1 text-left text-[12px] font-semibold leading-snug drop-shadow-sm"
+                style={{ color: leftRailLabelColor }}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  brazeExpandedFirstRowChrome.onLabelDoubleClick?.();
+                }}
+              >
+                {brazeExpandedFirstRowChrome.label}
+              </span>
+              <button
+                type="button"
+                className="flex shrink-0 items-center justify-center rounded-md p-0.5 text-current hover:bg-black/10"
+                aria-expanded
+                aria-label={`Collapse ${brazeExpandedFirstRowChrome.label}`}
+                onClick={brazeExpandedFirstRowChrome.onCollapse}
+              >
+                <ChevronDown className="h-4 w-4 shrink-0" aria-hidden />
+              </button>
+            </div>
+            <div className="h-px w-full shrink-0 bg-black/15" aria-hidden />
+          </>
+        ) : (
+          leftRailExtra
+        )}
+        {titleOrder.map((tile) => (
+          <button
+            key={tileKey(tile)}
+            type="button"
+            className={clsx(
+              "text-left font-semibold leading-snug drop-shadow-sm hover:underline",
+              matchAiDecisioningSwimlaneBars ? "text-[14px]" : "text-[12px]",
+            )}
+            style={{ color: leftRailLabelColor }}
+            onClick={() => onOpenTile(tile)}
+          >
+            {tile.Title}
+          </button>
+        ))}
+      </div>
+      {rail}
+    </div>
   );
 }
 
@@ -720,8 +1051,56 @@ export function BrazeCoreGanttChart({
   laneLegend,
   laneLegendTitle = "Workstreams",
   matchAiDecisioningSwimlaneBars = false,
+  aiDecisioningCategoryColors,
+  workstreamLaneColorOverrides,
+  legendProspectLabel,
+  workstreamLabelTextTypeById,
+  onWorkstreamLabelTextDoubleClick,
+  onAppendTimelineAnnotationAtColumn,
+  timelineAnnotation,
+  onTimelineAnnotationChange,
+  onAfterAnnotationTitleCommit,
 }: BrazeCoreGanttChartProps) {
-  const categoryExampleHue = WORKSTREAMS[0]!.color;
+  const ganttAnnotationTrackRef = useRef<HTMLDivElement>(null);
+  const ganttRailLocalRef = useRef<HTMLDivElement | null>(null);
+  const setGanttTimelineRailNode = useCallback(
+    (el: HTMLDivElement | null) => {
+      ganttRailLocalRef.current = el;
+      if (!timelineRailRef) return;
+      if (typeof timelineRailRef === "function") {
+        (timelineRailRef as (instance: HTMLDivElement | null) => void)(el);
+      } else {
+        (timelineRailRef as { current: HTMLDivElement | null }).current = el;
+      }
+    },
+    [timelineRailRef],
+  );
+
+  const prospectKeyName = (legendProspectLabel ?? "").trim() || "Prospect";
+  const prospectActivityKeyLabel = `${prospectKeyName} Activity`;
+  const adsTileCategoryColorsResolved = useMemo(
+    () => resolveTileCategoryColorsFromConfig(aiDecisioningCategoryColors ?? {}),
+    [
+      aiDecisioningCategoryColors?.onboardingSessionTileColor,
+      aiDecisioningCategoryColors?.customerActivityTileColor,
+    ],
+  );
+
+  /** AI Gantt key: combo swatch uses a border only when customer color is the default (not a custom hex). */
+  const adsGanttKeyCustomerComboUsesBorder = useMemo(
+    () => parseHexColorOptional(aiDecisioningCategoryColors?.customerActivityTileColor) === undefined,
+    [aiDecisioningCategoryColors?.customerActivityTileColor],
+  );
+
+  const categoryMilestoneFill = useMemo(
+    () => milestoneAccentHexFromConfig(aiDecisioningCategoryColors ?? {}),
+    [
+      aiDecisioningCategoryColors?.onboardingSessionTileColor,
+      aiDecisioningCategoryColors?.customerActivityTileColor,
+    ],
+  );
+
+  const aiGanttMilestoneLegendHue = categoryMilestoneFill ?? ADS_GANTT_MILESTONE_ACCENT;
 
   const visibleGanttTiles = useMemo(() => {
     let list = showOnboardingSessions
@@ -734,17 +1113,61 @@ export function BrazeCoreGanttChart({
   }, [tiles, showOnboardingSessions, matchAiDecisioningSwimlaneBars]);
   const ganttRows = useMemo(() => {
     if (laneLegend?.length) {
-      return buildGanttRowsByLaneOrder(
-        visibleGanttTiles,
-        laneLegend.map((l) => l.id),
-      );
+      const ids = laneLegend.map((l) => l.id);
+      if (matchAiDecisioningSwimlaneBars) {
+        return buildGanttRowsByLaneOrder(visibleGanttTiles, ids);
+      }
+      return buildGanttRowsByWorkstream(visibleGanttTiles, ids);
     }
     return buildGanttRowsByWorkstream(visibleGanttTiles);
-  }, [visibleGanttTiles, laneLegend]);
+  }, [visibleGanttTiles, laneLegend, matchAiDecisioningSwimlaneBars]);
 
-  const streamLegendRows = laneLegend?.length
-    ? laneLegend
-    : WORKSTREAMS.map((ws) => ({ id: ws.id, label: ws.label, color: ws.color }));
+  const streamLegendRows = useMemo(() => {
+    if (laneLegend?.length) return laneLegend;
+    return WORKSTREAMS.map((ws) => ({
+      id: ws.id,
+      label: ws.label,
+      color: workstreamLaneColorOverrides?.get(ws.id) ?? ws.color,
+    }));
+  }, [laneLegend, workstreamLaneColorOverrides]);
+
+  /**
+   * Braze Core Gantt category key (prospect activity + onboarding): single accent from the workstream
+   * legend palette — the darkest hex among those lane colors (covers custom gradient endpoints).
+   */
+  const brazeGanttKeyWorkstreamAccentHex = useMemo(() => {
+    const colors = streamLegendRows.map((r) => r.color);
+    if (colors.length === 0) return WORKSTREAMS[0]!.color;
+    return colors.reduce((darkest, c) => darkerOfTwoHexes(darkest, c));
+  }, [streamLegendRows]);
+
+  /**
+   * Braze Core Gantt key milestone star: same rule as milestone bars — custom category milestone
+   * accent when set; otherwise each bar uses its workstream hue, so the key uses the darkest lane
+   * swatch (same pool as the workstream legend).
+   */
+  const brazeGanttKeyMilestoneStarHue = useMemo(
+    () => categoryMilestoneFill ?? brazeGanttKeyWorkstreamAccentHex,
+    [categoryMilestoneFill, brazeGanttKeyWorkstreamAccentHex],
+  );
+
+  const [expandedBrazeWorkstreams, setExpandedBrazeWorkstreams] = useState(
+    () => new Set<Workstream>(),
+  );
+
+  const brazeWorkstreamSections = useMemo(() => {
+    if (matchAiDecisioningSwimlaneBars) return null;
+    return groupBrazeGanttRowsByWorkstream(ganttRows);
+  }, [ganttRows, matchAiDecisioningSwimlaneBars]);
+
+  const toggleBrazeWorkstreamExpanded = useCallback((ws: Workstream) => {
+    setExpandedBrazeWorkstreams((prev) => {
+      const next = new Set(prev);
+      if (next.has(ws)) next.delete(ws);
+      else next.add(ws);
+      return next;
+    });
+  }, []);
 
   const showColumnGuides = showMonthsRow || planOptionId === "growth_silver";
   const timelineGuideStyle = useMemo(() => {
@@ -777,34 +1200,50 @@ export function BrazeCoreGanttChart({
                 <Star
                   size={26}
                   className="shrink-0"
-                  fill={ADS_GANTT_MILESTONE_ACCENT}
-                  color={ADS_GANTT_MILESTONE_ACCENT}
-                  stroke={ADS_GANTT_MILESTONE_ACCENT}
+                  fill={aiGanttMilestoneLegendHue}
+                  color={aiGanttMilestoneLegendHue}
+                  stroke={aiGanttMilestoneLegendHue}
                   aria-hidden
                 />
-                <span className="font-semibold text-[#801ED7]">Key Milestone</span>
+                <span className="font-semibold" style={{ color: aiGanttMilestoneLegendHue }}>
+                  Key Milestone
+                </span>
               </span>
               <span className="inline-flex items-center gap-2">
                 <span
-                  className="inline-block shrink-0 rounded-md bg-[#300266] shadow-sm"
-                  style={{ height: ADS_GANTT_LEGEND_SWATCH_H_PX, width: ADS_GANTT_LEGEND_SWATCH_W_PX }}
+                  className="inline-block shrink-0 rounded-md shadow-sm"
+                  style={{
+                    backgroundColor: adsTileCategoryColorsResolved.onboardingBg,
+                    height: ADS_GANTT_LEGEND_SWATCH_H_PX,
+                    width: ADS_GANTT_LEGEND_SWATCH_W_PX,
+                  }}
                   aria-hidden
                 />
                 <span>
-                  <span className="font-semibold text-[#300266]">
+                  <span className="font-semibold text-[#2c1650]">
                     Primarily BrazeAI Decisioning Studio™
                   </span>
                 </span>
               </span>
               <span className="inline-flex items-center gap-2">
                 <span
-                  className="inline-block shrink-0 rounded-md border-2 border-[#801ED7] bg-[#C9C4EF] shadow-sm"
-                  style={{ height: ADS_GANTT_LEGEND_SWATCH_H_PX, width: ADS_GANTT_LEGEND_SWATCH_W_PX }}
+                  className={clsx(
+                    "inline-block shrink-0 rounded-md shadow-sm",
+                    adsGanttKeyCustomerComboUsesBorder && "border-2",
+                  )}
+                  style={{
+                    ...(adsGanttKeyCustomerComboUsesBorder
+                      ? { borderColor: adsTileCategoryColorsResolved.customerBorder }
+                      : {}),
+                    backgroundColor: adsTileCategoryColorsResolved.customerBg,
+                    height: ADS_GANTT_LEGEND_SWATCH_H_PX,
+                    width: ADS_GANTT_LEGEND_SWATCH_W_PX,
+                  }}
                   aria-hidden
                 />
                 <span>
-                  <span className="font-semibold text-[#300266]">
-                    Combination of BrazeAI Decisioning Studio™ and Customer
+                  <span className="font-semibold text-[#2c1650]">
+                    Combination of BrazeAI Decisioning Studio™ and {prospectKeyName}
                   </span>
                 </span>
               </span>
@@ -812,25 +1251,23 @@ export function BrazeCoreGanttChart({
           </div>
         ) : (
           <div className="text-[12px] leading-snug text-[#2F2354]">
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 pb-2">
               <span className="font-semibold text-[#2c1650]">Key</span>
               <span className="inline-flex items-center gap-2">
                 <span
                   className="inline-block h-6 w-10 rounded border-0 shadow-sm"
-                  style={{ backgroundColor: categoryExampleHue }}
+                  style={{ backgroundColor: brazeGanttKeyWorkstreamAccentHex }}
                   aria-hidden
                 />
-                <span className="font-medium" style={{ color: categoryExampleHue }}>
-                  Customer Activity
-                </span>
+                <span className="font-medium text-[#2c1650]">{prospectActivityKeyLabel}</span>
               </span>
               <span className="inline-flex items-center gap-2">
                 <span
-                  className="inline-block h-6 w-10 rounded border-2 bg-white shadow-sm"
-                  style={{ borderColor: categoryExampleHue }}
+                  className="inline-block h-6 w-10 shrink-0 rounded border-2 bg-white shadow-sm ring-1 ring-black/5"
+                  style={{ borderColor: brazeGanttKeyWorkstreamAccentHex }}
                   aria-hidden
                 />
-                <span>Onboarding Session</span>
+                <span className="font-medium text-[#2c1650]">Onboarding Session</span>
               </span>
               <span className="inline-flex items-center gap-2">
                 <span
@@ -839,15 +1276,15 @@ export function BrazeCoreGanttChart({
                 >
                   <Star
                     size={16}
-                    style={{ color: categoryExampleHue }}
-                    fill={categoryExampleHue}
-                    stroke={categoryExampleHue}
+                    style={{ color: brazeGanttKeyMilestoneStarHue }}
+                    fill={brazeGanttKeyMilestoneStarHue}
+                    stroke={brazeGanttKeyMilestoneStarHue}
                   />
                 </span>
-                <span>Project milestone</span>
+                <span className="font-medium text-[#2c1650]">Project Milestone</span>
               </span>
             </div>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-[#f0ebfb] pt-3">
+            <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-[#f0ebfb] pt-3">
               <span className="font-semibold uppercase tracking-wide text-[#6B5A9A]">
                 {laneLegendTitle}
               </span>
@@ -870,15 +1307,29 @@ export function BrazeCoreGanttChart({
       </div>
 
       <div className="min-w-0 overflow-x-auto">
-        <div className="min-w-[min(100%,720px)]">
+        <TimelineAnnotationsShell
+          timelineColumns={timelineColumns}
+          document={timelineAnnotation ?? { annotations: [] }}
+          onDocumentChange={onTimelineAnnotationChange ?? (() => {})}
+          readOnly={readOnly || !onTimelineAnnotationChange}
+          railRef={ganttRailLocalRef}
+          trackRef={ganttAnnotationTrackRef}
+          onAfterAnnotationTitleCommit={onAfterAnnotationTitleCommit}
+        >
+          <div className="min-w-[min(100%,720px)]">
           <div className="grid grid-cols-[minmax(12rem,16rem)_1fr] border-b border-[#E8E5F8]">
             <div className="border-r border-[#E8E5F8] px-3 py-3 text-base font-semibold text-[#300266]">
               Activity
             </div>
             <div
-              ref={timelineRailRef}
+              ref={setGanttTimelineRailNode}
               className="grid"
               style={{ gridTemplateColumns: `repeat(${timelineColumns}, minmax(0, 1fr))` }}
+              onDoubleClick={(e) => {
+                if (readOnly || !onAppendTimelineAnnotationAtColumn) return;
+                const col = timelineColumnFromClientX(e.currentTarget, e.clientX, timelineColumns);
+                onAppendTimelineAnnotationAtColumn(col);
+              }}
             >
               {timelineConfig.phases.map((phase, i) => (
                 <div
@@ -936,124 +1387,191 @@ export function BrazeCoreGanttChart({
             </div>
           )}
 
-          {ganttRows.map((rowTiles) => {
-            const wsId = rowTiles[0]!.Workstream;
-            const color = resolveWorkstreamColor(wsId, laneLegend);
-            const laneAssigned = assignLanesInRow(rowTiles, planOptionId, durationWeeks);
-            const maxLane = laneAssigned.reduce((m, x) => Math.max(m, x.lane), 0);
-            const rowMinH = rowTimelineMinHeightPx(maxLane);
-            const rowKey = rowTiles.map(tileKey).join("|");
+          {matchAiDecisioningSwimlaneBars || !brazeWorkstreamSections
+            ? ganttRows.map((rowTiles) => (
+                <BrazeCoreGanttActivityRow
+                  key={rowTiles.map(tileKey).join("|")}
+                  rowTiles={rowTiles}
+                  laneLegend={laneLegend}
+                  workstreamLaneColorOverrides={workstreamLaneColorOverrides}
+                  planOptionId={planOptionId}
+                  durationWeeks={durationWeeks}
+                  timelineColumns={timelineColumns}
+                  readOnly={readOnly}
+                  onOpenTile={onOpenTile}
+                  matchAiDecisioningSwimlaneBars={matchAiDecisioningSwimlaneBars}
+                  adsTileCategoryColors={adsTileCategoryColorsResolved}
+                  categoryMilestoneFill={categoryMilestoneFill}
+                  timelineGuideStyle={timelineGuideStyle}
+                  spanResize={spanResize}
+                  workstreamLabelTextTypeById={workstreamLabelTextTypeById}
+                />
+              ))
+            : brazeWorkstreamSections.flatMap(({ workstream: sectionWs, rows: sectionRows }) => {
+                const expanded = expandedBrazeWorkstreams.has(sectionWs);
+                const wsLabel =
+                  laneLegend?.find((l) => l.id === sectionWs)?.label ??
+                  WORKSTREAMS.find((w) => w.id === sectionWs)?.label ??
+                  sectionWs;
 
-            const titleOrder = [...rowTiles]
-              .filter((t) => t.Category !== "milestone")
-              .sort(sortTilesForWorkstream);
-
-            const primaryTile =
-              titleOrder.find((t) => t.Category === "onboarding_session") ??
-              titleOrder.find((t) => t.Category === "customer_activity");
-            const leftRailBg = matchAiDecisioningSwimlaneBars
-              ? primaryTile?.Category === "onboarding_session"
-                ? ADS_GANTT_LEFT_RAIL_ONBOARDING_BG
-                : ADS_GANTT_LEFT_RAIL_CUSTOMER_BG
-              : color;
-            const leftRailLabelColor = matchAiDecisioningSwimlaneBars
-              ? primaryTile?.Category === "onboarding_session"
-                ? "#ffffff"
-                : ADS_GANTT_CUSTOMER_TEXT
-              : "#ffffff";
-
-            return (
-              <div
-                key={rowKey}
-                className="grid grid-cols-[minmax(12rem,16rem)_1fr] border-b border-[#ebe4ff]"
-              >
-                <div
-                  className="flex flex-col justify-center gap-1 border-r border-[#E8E5F8] px-3 py-1"
-                  style={{ backgroundColor: leftRailBg }}
-                >
-                  {titleOrder.map((tile) => (
-                    <button
-                      key={tileKey(tile)}
-                      type="button"
-                      className={clsx(
-                        "text-left font-semibold leading-snug drop-shadow-sm hover:underline",
-                        matchAiDecisioningSwimlaneBars ? "text-[14px]" : "text-[12px]",
-                      )}
-                      style={{ color: leftRailLabelColor }}
-                      onClick={() => onOpenTile(tile)}
-                    >
-                      {tile.Title}
-                    </button>
-                  ))}
-                </div>
-                {(() => {
+                if (!expanded) {
+                  const wsColor = resolveWorkstreamColor(
+                    sectionWs,
+                    laneLegend,
+                    workstreamLaneColorOverrides,
+                  );
+                  const collapsedLeftType =
+                    workstreamLabelTextTypeById?.get(sectionWs) ??
+                    workstreamLabelTextTypeFromRailHex(wsColor);
+                  const collapsedLeftColor = labelHexForWorkstreamTextType(collapsedLeftType);
+                  /** Collapsed rail: customer activities only (ignore onboarding sessions even when Gantt shows them). */
+                  const flatTiles = sectionRows
+                    .flat()
+                    .filter((t) => t.Category === "customer_activity");
+                  const laneAssigned = assignLanesInRow(flatTiles, planOptionId, durationWeeks);
+                  const maxLane = laneAssigned.reduce((m, x) => Math.max(m, x.lane), 0);
+                  const collapsedRowMinH = rowTimelineMinHeightPx(maxLane);
                   const TaskBar = readOnly ? GanttTaskBarStatic : GanttTaskBarDraggable;
-                  const bars = laneAssigned.map(({ tile, lane }) => {
-                    const tu = getTileTimelineUnits(planOptionId, tile, durationWeeks);
-                    const spanUnits = tu.endUnit - tu.startUnit + 1;
-                    const leftPct = ((tu.startUnit - 1) / timelineColumns) * 100;
+                  const collapsedSegments = mergeAdjacentCustomerActivitySegments(
+                    laneAssigned,
+                    planOptionId,
+                    durationWeeks,
+                  );
+                  const collapsedBars = collapsedSegments.map((seg) => {
+                    const spanUnits = seg.endUnit - seg.startUnit + 1;
+                    const leftPct = ((seg.startUnit - 1) / timelineColumns) * 100;
                     const widthPct = (spanUnits / timelineColumns) * 100;
                     const topPx =
                       GANTT_ROW_TOP_PAD_PX +
-                      lane * (GANTT_TASK_BAR_HEIGHT_PX + GANTT_TASK_BAR_LANE_GAP_PX);
-                    const frameStyle: CSSProperties = {
-                      position: "absolute",
-                      left: `${leftPct}%`,
-                      width: `${Math.max(widthPct, 0.4)}%`,
-                      minWidth: 4,
-                      top: topPx,
-                      height: GANTT_TASK_BAR_HEIGHT_PX,
-                    };
+                      seg.lane * (GANTT_TASK_BAR_HEIGHT_PX + GANTT_TASK_BAR_LANE_GAP_PX);
+                    const key = seg.tiles.map(tileKey).join("|");
+                    if (seg.tiles.length === 1) {
+                      const tile = seg.tiles[0]!;
+                      return (
+                        <Fragment key={key}>
+                          <TaskBar
+                            tile={tile}
+                            workstreamHue={wsColor}
+                            matchAiDecisioningSwimlaneBars={false}
+                            adsTileCategoryColors={adsTileCategoryColorsResolved}
+                            categoryMilestoneFill={categoryMilestoneFill}
+                            leftPct={leftPct}
+                            widthPct={widthPct}
+                            topPx={topPx}
+                            onOpen={() => onOpenTile(tile)}
+                          />
+                        </Fragment>
+                      );
+                    }
+                    const fill = wsColor;
+                    const barFg = workstreamLabelTextTypeById?.has(sectionWs)
+                      ? labelHexForWorkstreamTextType(workstreamLabelTextTypeById.get(sectionWs)!)
+                      : textColorOnTileBackground(fill);
+                    const titles = seg.tiles.map((t) => t.Title).join(" · ");
+                    const first = seg.tiles[0]!;
                     return (
-                      <Fragment key={tileKey(tile)}>
-                        <TaskBar
-                          tile={tile}
-                          workstreamHue={color}
-                          matchAiDecisioningSwimlaneBars={matchAiDecisioningSwimlaneBars}
-                          leftPct={leftPct}
-                          widthPct={widthPct}
-                          topPx={topPx}
-                          onOpen={() => onOpenTile(tile)}
-                        />
-                        {spanResize && !readOnly && tile.Category !== "milestone" ? (
-                          <div className="pointer-events-none" style={frameStyle}>
-                            <BrazeCoreSpanResizeHandle
-                              tile={tile}
-                              planOptionId={spanResize.planOptionId}
-                              durationWeeks={spanResize.durationWeeks}
-                              timelineColumns={spanResize.timelineColumns}
-                              templateSpanWeeks={spanResize.templateSpanWeeksForTile(tile)}
-                              getTimelineWidthPx={spanResize.getTimelineWidthPx}
-                              onSpanChange={(span) => spanResize.onSpanChange(tile, span)}
-                              heightClass="h-8"
-                              mode={spanResize.spanResizeMode ?? "braze"}
-                              handleHeightPx={
-                                spanResize.spanResizeHandleHeightPx ?? GANTT_TASK_BAR_HEIGHT_PX
-                              }
-                            />
-                          </div>
-                        ) : null}
-                      </Fragment>
+                      <button
+                        key={key}
+                        type="button"
+                        aria-label={titles}
+                        title={titles}
+                        className="absolute z-[30] flex items-center justify-center gap-1 overflow-hidden rounded-md border-0 px-1.5 text-center text-[9px] font-medium leading-tight shadow-sm"
+                        style={{
+                          left: `${leftPct}%`,
+                          width: `${Math.max(widthPct, 0.4)}%`,
+                          minWidth: 4,
+                          top: topPx,
+                          height: GANTT_TASK_BAR_HEIGHT_PX,
+                          backgroundColor: fill,
+                          color: barFg,
+                        }}
+                        onClick={() => onOpenTile(first)}
+                      />
                     );
                   });
-                  return readOnly ? (
-                    <GanttRowTimelineRailStatic minHeight={rowMinH} timelineGuideStyle={timelineGuideStyle}>
-                      {bars}
+
+                  const collapsedRail = readOnly ? (
+                    <GanttRowTimelineRailStatic
+                      minHeight={collapsedRowMinH}
+                      timelineGuideStyle={timelineGuideStyle}
+                    >
+                      {collapsedBars}
                     </GanttRowTimelineRailStatic>
                   ) : (
                     <GanttRowTimelineRailDroppable
-                      workstream={wsId}
-                      minHeight={rowMinH}
+                      workstream={sectionWs}
+                      minHeight={collapsedRowMinH}
                       timelineGuideStyle={timelineGuideStyle}
                     >
-                      {bars}
+                      {collapsedBars}
                     </GanttRowTimelineRailDroppable>
                   );
-                })()}
-              </div>
-            );
-          })}
+
+                  return [
+                    <div
+                      key={`braze-collapsed-${sectionWs}`}
+                      className="grid grid-cols-[minmax(12rem,16rem)_1fr] border-b border-[#ebe4ff]"
+                    >
+                      <div
+                        className="flex items-center gap-2 border-r border-[#E8E5F8] px-3 py-1"
+                        style={{
+                          backgroundColor: wsColor,
+                          color: collapsedLeftColor,
+                        }}
+                      >
+                        <button
+                          type="button"
+                          className="flex shrink-0 items-center justify-center rounded-md p-1 hover:bg-black/10"
+                          aria-expanded={false}
+                          aria-label={`Expand ${wsLabel}`}
+                          onClick={() => toggleBrazeWorkstreamExpanded(sectionWs)}
+                          onDoubleClick={(e) => e.stopPropagation()}
+                        >
+                          <ChevronRight className="h-5 w-5 shrink-0" aria-hidden />
+                        </button>
+                        <span
+                          className="text-left text-[12px] font-semibold leading-snug drop-shadow-sm"
+                          onDoubleClick={() => onWorkstreamLabelTextDoubleClick?.(sectionWs)}
+                        >
+                          {wsLabel}
+                        </span>
+                      </div>
+                      {collapsedRail}
+                    </div>,
+                  ];
+                }
+
+                return sectionRows.map((rowTiles, rowIdx) => (
+                  <BrazeCoreGanttActivityRow
+                    key={rowTiles.map(tileKey).join("|")}
+                    rowTiles={rowTiles}
+                    laneLegend={laneLegend}
+                    workstreamLaneColorOverrides={workstreamLaneColorOverrides}
+                    planOptionId={planOptionId}
+                    durationWeeks={durationWeeks}
+                    timelineColumns={timelineColumns}
+                    readOnly={readOnly}
+                    onOpenTile={onOpenTile}
+                    matchAiDecisioningSwimlaneBars={false}
+                    adsTileCategoryColors={adsTileCategoryColorsResolved}
+                    categoryMilestoneFill={categoryMilestoneFill}
+                    timelineGuideStyle={timelineGuideStyle}
+                    spanResize={spanResize}
+                    brazeExpandedFirstRowChrome={
+                      rowIdx === 0
+                        ? {
+                            label: wsLabel,
+                            onCollapse: () => toggleBrazeWorkstreamExpanded(sectionWs),
+                            onLabelDoubleClick: () => onWorkstreamLabelTextDoubleClick?.(sectionWs),
+                          }
+                        : undefined
+                    }
+                    workstreamLabelTextTypeById={workstreamLabelTextTypeById}
+                  />
+                ));
+              })}
         </div>
+        </TimelineAnnotationsShell>
       </div>
     </div>
   );

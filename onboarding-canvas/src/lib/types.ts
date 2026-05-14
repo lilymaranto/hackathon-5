@@ -1,3 +1,5 @@
+import type { TimelineAnnotationDocument } from "./timeline-annotations";
+
 export type TileCategory =
   | "onboarding_session"
   | "customer_activity"
@@ -17,6 +19,14 @@ export type Workstream =
   | "two"
   | "three"
   | "four";
+
+/** Braze Core workstream rail label contrast (Caboodle **Workstream_Order** JSON). */
+export type WorkstreamLabelTextType = "b" | "w";
+
+export type BrazeWorkstreamOrderEntry = {
+  workstream: Workstream;
+  type: WorkstreamLabelTextType;
+};
 
 export type ProductType = "Braze Core" | "AI Decisioning Studio";
 
@@ -52,6 +62,8 @@ export type ChannelPreferences = {
 export type ConfigRecord = {
   Config_ID: string;
   Title: string;
+  /** Optional toolbar heading override from configs sheet `chosen_title`; when blank, UI falls back to computed plan heading. */
+  chosenTitle?: string;
   Product_Type: ProductType;
   Duration_Weeks: PlanDurationWeeks;
   /** Caboodle **Plan_Option** (slug); drives timeline label and week scaling. */
@@ -65,6 +77,26 @@ export type ConfigRecord = {
   CaboodlePatchKey?: string;
   /** Last exported Google Doc URL for OM hand-off notes (Caboodle **URL** column when present). */
   handoffDocUrl?: string;
+  /** Optional `#rrggbb` for onboarding-session tiles (swimlane + Gantt key / ADS bars). */
+  onboardingSessionTileColor?: string;
+  /** Optional `#rrggbb` for customer-activity tile fill (swimlane + Gantt key / ADS bars). */
+  customerActivityTileColor?: string;
+  /**
+   * Optional `#rrggbb` for canvas toolbar actions (View Gantt / Swimlane, add tile, Save layout).
+   * Caboodle configs sheet **Button_Color** (also reads legacy `button_color` / `buttonColor`).
+   */
+  buttonColor?: string;
+  /** Braze Core: gradient start for visible workstream row rail / Gantt workstream hues (with {@link workstreamGradientBottomColor}). */
+  workstreamGradientTopColor?: string;
+  /** Braze Core: gradient end for visible workstream rows (last row). */
+  workstreamGradientBottomColor?: string;
+  /**
+   * Braze Core: swimlane + Gantt row order + per-row label contrast (JSON on **Workstream_Order**).
+   * Omitted or empty → default {@link WORKSTREAMS} order with algorithmic `type`.
+   */
+  brazeCoreWorkstreamOrder?: BrazeWorkstreamOrderEntry[];
+  /** Caboodle **TimelineAnnotation** JSON: vertical timeline markers (swimlane + Gantt). */
+  timelineAnnotation?: TimelineAnnotationDocument;
   channels: ChannelPreferences;
 };
 
@@ -86,6 +118,8 @@ export type TileRecord = {
   Description?: string;
   /** Tiles sheet **Attendees** (multiline / bullets). When empty, drawer uses tile library suggested attendees. */
   Attendees?: string;
+  /** Tiles sheet **Agenda** (multiline / bullets). When empty, drawer uses tile library agenda. */
+  Agenda?: string;
   /** Tiles sheet **Resources** (multiline). When empty, drawer uses tile library resource links. */
   Resources?: string;
   /** Tiles sheet **Desired_Outcomes** (multiline / bullets). When empty, drawer uses library outcomes. */

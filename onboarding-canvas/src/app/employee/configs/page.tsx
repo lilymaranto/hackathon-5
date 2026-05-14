@@ -1,11 +1,8 @@
 import { ConfigCreateForm } from "@/components/ConfigCreateForm";
 import { ConfigsMineToggle } from "@/components/ConfigsMineToggle";
-import { authOptions } from "@/lib/auth-options";
 import { ConfigsTable } from "@/components/ConfigsTable";
 import { ConfigRecord } from "@/lib/types";
-import { getServerSession } from "next-auth";
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
 
 async function getConfigs(search?: string, mine?: boolean) {
   const headerList = await headers();
@@ -36,9 +33,6 @@ export default async function EmployeeConfigsPage({
 }: {
   searchParams: Promise<{ search?: string; mine?: string }>;
 }) {
-  const session = await getServerSession(authOptions);
-  if (!session) redirect("/employee/signin");
-
   const { search, mine } = await searchParams;
   const configs = await getConfigs(search, mine === "1");
 
@@ -67,8 +61,8 @@ export default async function EmployeeConfigsPage({
               {mine === "1" ? <input type="hidden" name="mine" value="1" /> : null}
               <button
                 type="submit"
-                title="Search configs by account title"
-                aria-label="Search configs by account title"
+                title="Search configs by prospect name"
+                aria-label="Search configs by prospect name"
                 className="shrink-0 rounded-full border border-[#8b30e7] px-5 py-2.5 text-base font-semibold text-[#8b30e7] hover:bg-[#f2e8ff]"
               >
                 Search

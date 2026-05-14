@@ -41,18 +41,18 @@ export function PlanTimelineSelect({ value, onChange, size = "md", compact = fal
   const triggerClasses =
     size === "sm"
       ? compact
-        ? "px-[11px] py-[7px] text-sm font-normal"
-        : "px-3 py-2 text-sm font-normal"
-      : "px-4 py-2.5 text-base";
+        ? "px-[11px] py-[7px] text-xs font-normal"
+        : "px-3 py-2 text-xs font-normal"
+      : "px-4 py-2.5 text-sm";
 
   const optionRowClasses =
     size === "sm"
       ? compact
-        ? "px-[11px] py-[7px] text-sm"
-        : "px-3 py-2 text-sm"
-      : "px-4 py-2.5 text-base";
+        ? "px-[11px] py-[7px] text-xs"
+        : "px-3 py-2 text-xs"
+      : "px-4 py-2.5 text-sm";
 
-  const chevronSize = size === "sm" ? (compact ? 14 : 16) : 18;
+  const chevronSize = size === "sm" ? (compact ? 12 : 14) : 16;
 
   return (
     <div ref={rootRef} className="relative w-full">

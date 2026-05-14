@@ -32,6 +32,7 @@ export async function PATCH(request: NextRequest) {
         Title?: string;
         Description?: string;
         Attendees?: string;
+        Agenda?: string;
         Resources?: string;
         Desired_Outcomes?: string;
       }>;
@@ -73,7 +74,7 @@ export async function POST(request: NextRequest) {
         | "Notes"
         | "Description"
       > &
-        Partial<Pick<TileRecord, "Attendees" | "Resources" | "Desired_Outcomes">>;
+        Partial<Pick<TileRecord, "Attendees" | "Agenda" | "Resources" | "Desired_Outcomes">>;
     };
 
     const configId = body.configId?.trim();
@@ -101,6 +102,7 @@ export async function POST(request: NextRequest) {
       Notes: t.Notes ?? "",
       Description: t.Description ?? "",
       Attendees: t.Attendees,
+      Agenda: t.Agenda,
       Resources: t.Resources,
       Desired_Outcomes: t.Desired_Outcomes,
     });

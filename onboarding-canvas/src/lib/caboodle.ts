@@ -1,11 +1,20 @@
 import {
   AI_DECISIONING_STUDIO_TIMELINE_WEEKS,
+  WORKSTREAMS,
   durationWeeksForPlanOption,
   getAiDecisioningStudioSeedTemplate,
   getSeedTemplate,
   parseExplicitPlanOptionFromRecord,
   resolvePlanOptionId,
 } from "@/lib/constants";
+import { parseHexColorOptional } from "@/lib/tile-category-colors";
+import {
+  BRAZE_CORE_WORKSTREAM_IDS,
+  brazeWorkstreamOrderIds,
+  normalizeBrazeCoreWorkstreamOrder,
+  parseBrazeCoreWorkstreamOrderJson,
+  railColorResolverForWorkstreamOrder,
+} from "@/lib/braze-workstream-order";
 import {
   ConfigRecord,
   IndustryType,
@@ -13,7 +22,13 @@ import {
   PlanOptionId,
   ProductType,
   TileRecord,
+  Workstream,
 } from "@/lib/types";
+import {
+  EMPTY_TIMELINE_ANNOTATION_DOC,
+  parseTimelineAnnotationField,
+  serializeTimelineAnnotationDocument,
+} from "@/lib/timeline-annotations";
 
 function requiredEnv(key: string): string {
   const value = process.env[key];
@@ -331,6 +346,15 @@ function normalizeChannels(record: Record<string, unknown>): ConfigRecord["chann
   return { email, sms, whatsapp, inProductMessaging };
 }
 
+function configBrazeWorkstreamOrderColumn(): string {
+  return process.env.CABOODLE_CONFIG_WORKSTREAM_ORDER_COLUMN?.trim() || "Workstream_Order";
+}
+
+/** Configs sheet column for timeline marker JSON (must match Caboodle / Google Sheet header). */
+function configTimelineAnnotationColumn(): string {
+  return process.env.CABOODLE_CONFIG_TIMELINE_ANNOTATION_COLUMN?.trim() || "TimelineAnnotation";
+}
+
 function normalizeConfig(record: Record<string, unknown>): ConfigRecord {
   const configId = String(record.Config_ID ?? "");
   const productType = String(record.Product_Type ?? "Braze Core") as ProductType;
@@ -358,10 +382,71 @@ function normalizeConfig(record: Record<string, unknown>): ConfigRecord {
     record["Export URL"] ??
     "";
   const handoffDocUrl = String(handoffUrlRaw ?? "").trim();
+  const chosenTitle = String(
+    record.chosen_title ??
+      record.Chosen_Title ??
+      record.chosenTitle ??
+      record["Chosen Title"] ??
+      "",
+  ).trim();
+
+  const onboardingSessionTileColor = parseHexColorOptional(
+    record.onboarding_color ??
+      record.Onboarding_Color ??
+      record.Onboarding_Session_Tile_Color ??
+      record.Onboarding_Session_Color ??
+      record.onboarding_session_tile_color,
+  );
+  const customerActivityTileColor = parseHexColorOptional(
+    record.customer_color ??
+      record.Customer_Color ??
+      record.Customer_Activity_Tile_Color ??
+      record.Customer_Activity_Color ??
+      record.customer_activity_tile_color,
+  );
+  const buttonColor = parseHexColorOptional(
+    record.Button_Color ?? record.button_color ?? record.buttonColor,
+  );
+  const workstreamGradientTopColor = parseHexColorOptional(
+    record.workstream_color1 ??
+      record.Workstream_Color1 ??
+      record.Workstream_Color_1 ??
+      record.workstream_color_top ??
+      record.Workstream_Color_Top ??
+      record.workstream_gradient_top_color,
+  );
+  const workstreamGradientBottomColor = parseHexColorOptional(
+    record.workstream_color2 ??
+      record.Workstream_Color2 ??
+      record.Workstream_Color_2 ??
+      record.workstream_color_bottom ??
+      record.Workstream_Color_Bottom ??
+      record.workstream_gradient_bottom_color,
+  );
+
+  const wsOrderCol = configBrazeWorkstreamOrderColumn();
+  const wsOrderRaw = record[wsOrderCol] ?? record.Workstream_Order ?? record.workstream_order;
+  const hasWsOrderRaw = wsOrderRaw != null && String(wsOrderRaw).trim() !== "";
+  const brazeCoreWorkstreamOrder = hasWsOrderRaw
+    ? parseBrazeCoreWorkstreamOrderJson(
+        wsOrderRaw,
+        workstreamGradientTopColor,
+        workstreamGradientBottomColor,
+      )
+    : undefined;
+
+  const taCol = configTimelineAnnotationColumn();
+  const timelineAnnotation = parseTimelineAnnotationField(
+    record[taCol] ??
+      record.TimelineAnnotation ??
+      record.timeline_annotation ??
+      record.Timeline_Annotation,
+  );
 
   return {
     Config_ID: configId,
     Title: String(record.Title ?? ""),
+    ...(chosenTitle ? { chosenTitle } : {}),
     Product_Type: productType,
     Duration_Weeks: durationWeeks,
     planOptionId,
@@ -371,6 +456,13 @@ function normalizeConfig(record: Record<string, unknown>): ConfigRecord {
     Last_Saved: record.Last_Saved ? String(record.Last_Saved) : undefined,
     CaboodlePatchKey: extractPatchRowKey(record) ?? configId,
     ...(handoffDocUrl ? { handoffDocUrl } : {}),
+    ...(onboardingSessionTileColor ? { onboardingSessionTileColor } : {}),
+    ...(customerActivityTileColor ? { customerActivityTileColor } : {}),
+    ...(buttonColor ? { buttonColor } : {}),
+    ...(workstreamGradientTopColor ? { workstreamGradientTopColor } : {}),
+    ...(workstreamGradientBottomColor ? { workstreamGradientBottomColor } : {}),
+    ...(brazeCoreWorkstreamOrder?.length ? { brazeCoreWorkstreamOrder } : {}),
+    timelineAnnotation,
     channels: normalizeChannels(record),
   };
 }
@@ -422,23 +514,47 @@ function normalizeTile(record: Record<string, unknown>): TileRecord {
       "",
   );
 
-  const stringField = (keys: string[]): string => {
-    for (const key of keys) {
+  /** Caboodle / sheet may use alternate headers (spacing, casing); match loosely on normalized keys. */
+  function normalizeHeaderKey(key: string): string {
+    return key.trim().toLowerCase().replace(/\s+/g, " ");
+  }
+
+  function pickMultiLineField(preferredKeys: string[]): string {
+    for (const key of preferredKeys) {
       const v = record[key];
-      if (v === undefined || v === null) continue;
-      const s = String(v).trim();
-      if (s !== "") return String(v);
+      if (v !== undefined && v !== null && String(v).trim() !== "") return String(v);
+    }
+    const want = new Set(preferredKeys.map(normalizeHeaderKey));
+    for (const [rawKey, value] of Object.entries(record)) {
+      if (!want.has(normalizeHeaderKey(rawKey))) continue;
+      if (value === undefined || value === null) continue;
+      if (String(value).trim() === "") continue;
+      return String(value);
     }
     return "";
-  };
+  }
 
-  const attendees = stringField(["Attendees", "attendees", "Attendee"]);
-  const resources = stringField(["Resources", "resources", "Resource"]);
-  const desiredOutcomes = stringField([
+  const attendees = pickMultiLineField([
+    "Attendees",
+    "attendees",
+    "Attendee",
+    "Suggested Attendees",
+    "Suggested_Attendees",
+    "suggested_attendees",
+  ]);
+  const resources = pickMultiLineField(["Resources", "resources", "Resource"]);
+  const desiredOutcomes = pickMultiLineField([
     "Desired_Outcomes",
     "Desired Outcomes",
     "desired_outcomes",
     "DesiredOutcomes",
+  ]);
+  const agenda = pickMultiLineField([
+    "Agenda",
+    "agenda",
+    "Agenda_Text",
+    "agenda_text",
+    "Agenda Text",
   ]);
 
   return {
@@ -452,9 +568,10 @@ function normalizeTile(record: Record<string, unknown>): TileRecord {
     Category: String(record.Category ?? "customer_activity") as TileRecord["Category"],
     Notes: notes,
     Description: description,
-    ...(attendees ? { Attendees: attendees } : {}),
-    ...(resources ? { Resources: resources } : {}),
-    ...(desiredOutcomes ? { Desired_Outcomes: desiredOutcomes } : {}),
+    Attendees: attendees,
+    Agenda: agenda,
+    Resources: resources,
+    Desired_Outcomes: desiredOutcomes,
     CaboodlePatchKey: caboodleKey,
   };
 }
@@ -508,6 +625,11 @@ export async function createConfigWithSeed(input: {
   password?: string;
   createdBy: string;
   channels: ConfigRecord["channels"];
+  onboardingSessionTileColor?: string;
+  customerActivityTileColor?: string;
+  buttonColor?: string;
+  workstreamGradientTopColor?: string;
+  workstreamGradientBottomColor?: string;
 }): Promise<ConfigRecord> {
   const configId = `${input.title.toLowerCase().replace(/\s+/g, "-")}-${Math.random().toString(36).slice(2, 6)}`;
   const resolvedPassword = input.password?.trim() || fallbackPasswordFromTitle(input.title);
@@ -517,6 +639,20 @@ export async function createConfigWithSeed(input: {
       ? AI_DECISIONING_STUDIO_TIMELINE_WEEKS
       : durationWeeksForPlanOption(input.planOptionId);
   const planField = configsPlanOptionField();
+  const onboardingHex = parseHexColorOptional(input.onboardingSessionTileColor);
+  const customerHex = parseHexColorOptional(input.customerActivityTileColor);
+  const buttonHex = parseHexColorOptional(input.buttonColor);
+  const wsTopHex = parseHexColorOptional(input.workstreamGradientTopColor);
+  const wsBottomHex = parseHexColorOptional(input.workstreamGradientBottomColor);
+  const isBrazeCore = input.productType !== "AI Decisioning Studio";
+  const defaultOrderRail = railColorResolverForWorkstreamOrder(
+    [...BRAZE_CORE_WORKSTREAM_IDS],
+    wsTopHex,
+    wsBottomHex,
+  );
+  const defaultWorkstreamOrderJson = JSON.stringify(
+    normalizeBrazeCoreWorkstreamOrder(undefined, defaultOrderRail),
+  );
   await request(configsApiBase(), {
     method: "POST",
     body: JSON.stringify({
@@ -529,10 +665,18 @@ export async function createConfigWithSeed(input: {
       Password: resolvedPassword,
       Created_By: input.createdBy,
       Last_Saved: new Date().toISOString(),
-      Channel_Email: ch.email,
-      Channel_SMS: ch.sms,
-      Channel_WhatsApp: ch.whatsapp,
-      Channel_InProduct: ch.inProductMessaging,
+      [configHandoffUrlColumn()]: "",
+      Channel_Email: Boolean(ch.email),
+      Channel_SMS: Boolean(ch.sms),
+      Channel_WhatsApp: Boolean(ch.whatsapp),
+      Channel_InProduct: Boolean(ch.inProductMessaging),
+      ...(onboardingHex ? { onboarding_color: onboardingHex } : {}),
+      ...(customerHex ? { customer_color: customerHex } : {}),
+      ...(buttonHex ? { Button_Color: buttonHex } : {}),
+      ...(wsTopHex ? { workstream_color1: wsTopHex } : {}),
+      ...(wsBottomHex ? { workstream_color2: wsBottomHex } : {}),
+      ...(isBrazeCore ? { [configBrazeWorkstreamOrderColumn()]: defaultWorkstreamOrderJson } : {}),
+      [configTimelineAnnotationColumn()]: serializeTimelineAnnotationDocument(EMPTY_TIMELINE_ANNOTATION_DOC),
     }),
   });
 
@@ -563,6 +707,7 @@ export async function createConfigWithSeed(input: {
       Attendees: "",
       Resources: "",
       Desired_Outcomes: "",
+      Agenda: "",
     };
   });
 
@@ -580,7 +725,134 @@ export async function createConfigWithSeed(input: {
     throw new Error("Config was created but could not be reloaded.");
   }
   /** Caboodle GET often omits Channel_* keys; use what we just persisted so the canvas hides rows correctly. */
-  return { ...created, channels: input.channels };
+  return {
+    ...created,
+    channels: input.channels,
+    ...(isBrazeCore
+      ? { brazeCoreWorkstreamOrder: normalizeBrazeCoreWorkstreamOrder(undefined, defaultOrderRail) }
+      : {}),
+    ...(onboardingHex ? { onboardingSessionTileColor: onboardingHex } : {}),
+    ...(customerHex ? { customerActivityTileColor: customerHex } : {}),
+    ...(buttonHex ? { buttonColor: buttonHex } : {}),
+    ...(wsTopHex ? { workstreamGradientTopColor: wsTopHex } : {}),
+    ...(wsBottomHex ? { workstreamGradientBottomColor: wsBottomHex } : {}),
+  };
+}
+
+/** Deep-copies a config row and all tiles; new guest password is unique (not copied from source). */
+export async function duplicateConfig(sourceConfigId: string, createdBy: string): Promise<ConfigRecord> {
+  const source = await fetchConfigById(sourceConfigId);
+  if (!source) {
+    throw new Error(`Config not found: ${sourceConfigId}`);
+  }
+  const tiles = await fetchTiles(sourceConfigId);
+
+  const baseTitle = source.Title.trim() || "Timeline";
+  const dupTitle = `Copy of ${baseTitle}`;
+  const slugBase = dupTitle
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-]/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 48);
+  const configId = `${slugBase || "copy"}-${Math.random().toString(36).slice(2, 8)}`;
+  const resolvedPassword = `${fallbackPasswordFromTitle(dupTitle)}${Math.floor(1000 + Math.random() * 9000)}`;
+  const ch = source.channels;
+  const planField = configsPlanOptionField();
+  const onboardingHex = parseHexColorOptional(source.onboardingSessionTileColor ?? "");
+  const customerHex = parseHexColorOptional(source.customerActivityTileColor ?? "");
+  const buttonHex = parseHexColorOptional(source.buttonColor ?? "");
+  const wsTopHex = parseHexColorOptional(source.workstreamGradientTopColor ?? "");
+  const wsBottomHex = parseHexColorOptional(source.workstreamGradientBottomColor ?? "");
+  const isBrazeCore = source.Product_Type !== "AI Decisioning Studio";
+  const dupOrderRail = railColorResolverForWorkstreamOrder(
+    source.brazeCoreWorkstreamOrder?.length
+      ? brazeWorkstreamOrderIds(source.brazeCoreWorkstreamOrder)
+      : [...BRAZE_CORE_WORKSTREAM_IDS],
+    wsTopHex,
+    wsBottomHex,
+  );
+  const defaultWorkstreamOrderJson = JSON.stringify(
+    normalizeBrazeCoreWorkstreamOrder(undefined, dupOrderRail),
+  );
+
+  await request(configsApiBase(), {
+    method: "POST",
+    body: JSON.stringify({
+      Config_ID: configId,
+      Title: dupTitle,
+      Product_Type: source.Product_Type,
+      Duration_Weeks: source.Duration_Weeks,
+      [planField]: source.planOptionId,
+      Industry: source.Industry,
+      Password: resolvedPassword,
+      Created_By: createdBy,
+      Last_Saved: new Date().toISOString(),
+      [configHandoffUrlColumn()]: "",
+      Channel_Email: Boolean(ch.email),
+      Channel_SMS: Boolean(ch.sms),
+      Channel_WhatsApp: Boolean(ch.whatsapp),
+      Channel_InProduct: Boolean(ch.inProductMessaging),
+      ...(onboardingHex ? { onboarding_color: onboardingHex } : {}),
+      ...(customerHex ? { customer_color: customerHex } : {}),
+      ...(buttonHex ? { Button_Color: buttonHex } : {}),
+      ...(wsTopHex ? { workstream_color1: wsTopHex } : {}),
+      ...(wsBottomHex ? { workstream_color2: wsBottomHex } : {}),
+      ...(isBrazeCore
+        ? {
+            [configBrazeWorkstreamOrderColumn()]:
+              source.brazeCoreWorkstreamOrder?.length
+                ? JSON.stringify(source.brazeCoreWorkstreamOrder)
+                : defaultWorkstreamOrderJson,
+          }
+        : {}),
+      [configTimelineAnnotationColumn()]: serializeTimelineAnnotationDocument(
+        source.timelineAnnotation ?? EMPTY_TIMELINE_ANNOTATION_DOC,
+      ),
+    }),
+  });
+
+  await Promise.all(
+    tiles.map((t) =>
+      createTileRow(configId, {
+        Tile_ID: t.Tile_ID,
+        Workstream: t.Workstream,
+        Title: t.Title,
+        Start_Week: t.Start_Week,
+        Span_Weeks: t.Span_Weeks,
+        Stack_Order: t.Stack_Order,
+        Category: t.Category,
+        Notes: t.Notes ?? "",
+        Description: t.Description ?? "",
+        Attendees: t.Attendees,
+        Agenda: t.Agenda,
+        Resources: t.Resources,
+        Desired_Outcomes: t.Desired_Outcomes,
+      }),
+    ),
+  );
+
+  const created = await fetchConfigById(configId);
+  if (!created) {
+    throw new Error("Duplicate config was created but could not be reloaded.");
+  }
+  return {
+    ...created,
+    channels: ch,
+    ...(isBrazeCore
+      ? {
+          brazeCoreWorkstreamOrder: source.brazeCoreWorkstreamOrder?.length
+            ? source.brazeCoreWorkstreamOrder.map((e) => ({ ...e }))
+            : normalizeBrazeCoreWorkstreamOrder(undefined, dupOrderRail),
+        }
+      : {}),
+    ...(onboardingHex ? { onboardingSessionTileColor: onboardingHex } : {}),
+    ...(customerHex ? { customerActivityTileColor: customerHex } : {}),
+    ...(buttonHex ? { buttonColor: buttonHex } : {}),
+    ...(wsTopHex ? { workstreamGradientTopColor: wsTopHex } : {}),
+    ...(wsBottomHex ? { workstreamGradientBottomColor: wsBottomHex } : {}),
+  };
 }
 
 /** Updates tile placement and optional copy fields using Caboodle row key from sheet column **ID** only (not Title_ID). */
@@ -593,6 +865,7 @@ export async function patchTilesLayout(
       Title?: string;
       Description?: string;
       Attendees?: string;
+      Agenda?: string;
       Resources?: string;
       Desired_Outcomes?: string;
     }
@@ -632,6 +905,9 @@ export async function patchTilesLayout(
       if (update.Description !== undefined) {
         body.Description = update.Description;
       }
+      if (update.Agenda !== undefined) {
+        body.Agenda = update.Agenda;
+      }
       if (update.Attendees !== undefined) {
         body.Attendees = update.Attendees;
       }
@@ -665,7 +941,7 @@ export async function createTileRow(
     | "Notes"
     | "Description"
   > &
-    Partial<Pick<TileRecord, "Attendees" | "Resources" | "Desired_Outcomes">>,
+    Partial<Pick<TileRecord, "Attendees" | "Agenda" | "Resources" | "Desired_Outcomes">>,
 ): Promise<void> {
   const slug = String(tile.Tile_ID ?? "").trim();
   if (!slug) throw new Error("createTileRow: Tile_ID is required.");
@@ -683,6 +959,7 @@ export async function createTileRow(
     Notes: tile.Notes ?? "",
     Description: tile.Description ?? "",
     Attendees: tile.Attendees ?? "",
+    Agenda: tile.Agenda ?? "",
     Resources: tile.Resources ?? "",
     Desired_Outcomes: tile.Desired_Outcomes ?? "",
   };
@@ -702,25 +979,66 @@ export async function patchConfig(
     Pick<
       ConfigRecord,
       | "Title"
+      | "chosenTitle"
       | "Product_Type"
       | "Duration_Weeks"
       | "Industry"
       | "Password"
       | "planOptionId"
       | "handoffDocUrl"
+      | "onboardingSessionTileColor"
+      | "customerActivityTileColor"
+      | "buttonColor"
+      | "workstreamGradientTopColor"
+      | "workstreamGradientBottomColor"
+      | "brazeCoreWorkstreamOrder"
+      | "timelineAnnotation"
     >
   >,
 ): Promise<void> {
   const sheetUpdates: Record<string, unknown> = {};
   if (updates.Title !== undefined) sheetUpdates.Title = updates.Title;
+  if (updates.chosenTitle !== undefined) sheetUpdates.chosen_title = String(updates.chosenTitle).trim();
   if (updates.Product_Type !== undefined) sheetUpdates.Product_Type = updates.Product_Type;
   if (updates.Industry !== undefined) sheetUpdates.Industry = updates.Industry;
   if (updates.Password !== undefined) sheetUpdates.Password = updates.Password;
   if (updates.handoffDocUrl !== undefined) {
     sheetUpdates[configHandoffUrlColumn()] = updates.handoffDocUrl;
   }
+  if (updates.brazeCoreWorkstreamOrder !== undefined) {
+    const railFallback = (ws: Workstream) =>
+      WORKSTREAMS.find((w) => w.id === ws)?.color ?? "#300266";
+    sheetUpdates[configBrazeWorkstreamOrderColumn()] = JSON.stringify(
+      normalizeBrazeCoreWorkstreamOrder(updates.brazeCoreWorkstreamOrder, railFallback),
+    );
+  }
+  if (updates.onboardingSessionTileColor !== undefined) {
+    const v = parseHexColorOptional(updates.onboardingSessionTileColor);
+    sheetUpdates.onboarding_color = v ?? "";
+  }
+  if (updates.customerActivityTileColor !== undefined) {
+    const v = parseHexColorOptional(updates.customerActivityTileColor);
+    sheetUpdates.customer_color = v ?? "";
+  }
+  if (updates.buttonColor !== undefined) {
+    const v = parseHexColorOptional(updates.buttonColor);
+    sheetUpdates.Button_Color = v ?? "";
+  }
+  if (updates.workstreamGradientTopColor !== undefined) {
+    const v = parseHexColorOptional(updates.workstreamGradientTopColor);
+    sheetUpdates.workstream_color1 = v ?? "";
+  }
+  if (updates.workstreamGradientBottomColor !== undefined) {
+    const v = parseHexColorOptional(updates.workstreamGradientBottomColor);
+    sheetUpdates.workstream_color2 = v ?? "";
+  }
   if (updates.planOptionId !== undefined) {
     sheetUpdates[configsPlanOptionField()] = updates.planOptionId;
+  }
+  if (updates.timelineAnnotation !== undefined) {
+    sheetUpdates[configTimelineAnnotationColumn()] = serializeTimelineAnnotationDocument(
+      updates.timelineAnnotation,
+    );
   }
 
   let durationCommitted = false;

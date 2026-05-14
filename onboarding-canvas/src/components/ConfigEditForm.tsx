@@ -1,11 +1,14 @@
 "use client";
 
+import { ConfigTileCategoryColorPickers } from "@/components/ConfigTileCategoryColorPickers";
+import { ConfigWorkstreamGradientColorPickers } from "@/components/ConfigWorkstreamGradientColorPickers";
 import { PlanTimelineSelect } from "@/components/PlanTimelineSelect";
 import {
   INDUSTRY_OPTIONS,
   PLAN_PACKAGE_FOR_AI_DECISIONING_STUDIO,
   PRODUCT_OPTIONS,
 } from "@/lib/constants";
+import { parseHexColorOptional } from "@/lib/tile-category-colors";
 import { ConfigRecord, IndustryType, PlanOptionId, ProductType } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
@@ -21,14 +24,62 @@ export function ConfigEditForm({ config }: Props) {
   const [industry, setIndustry] = useState<IndustryType>(config.Industry);
   const [planOptionId, setPlanOptionId] = useState<PlanOptionId>(config.planOptionId);
   const [password, setPassword] = useState(config.Password);
+  const [onboardingSessionTileColor, setOnboardingSessionTileColor] = useState(
+    config.onboardingSessionTileColor ?? "",
+  );
+  const [customerActivityTileColor, setCustomerActivityTileColor] = useState(
+    config.customerActivityTileColor ?? "",
+  );
+  const [buttonColor, setButtonColor] = useState(config.buttonColor ?? "");
+  const [workstreamGradientTopColor, setWorkstreamGradientTopColor] = useState(
+    config.workstreamGradientTopColor ?? "",
+  );
+  const [workstreamGradientBottomColor, setWorkstreamGradientBottomColor] = useState(
+    config.workstreamGradientBottomColor ?? "",
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isAiDecisioningStudio = productType === "AI Decisioning Studio";
 
-  async function onSubmit(event: FormEvent) {
-    event.preventDefault();
+  /** Persist form; returns true when the API save succeeded. */
+  async function performSave(): Promise<boolean> {
     setSaving(true);
     setError(null);
+
+    const ob = onboardingSessionTileColor.trim();
+    const cb = customerActivityTileColor.trim();
+    if (ob && !parseHexColorOptional(ob)) {
+      setSaving(false);
+      setError("Onboarding Session color must be a hex value like #300266.");
+      return false;
+    }
+    if (cb && !parseHexColorOptional(cb)) {
+      setSaving(false);
+      setError(
+        `${(title.trim() || config.Title).trim() || "Prospect"} Activity color must be a hex value like #c9c4ef.`,
+      );
+      return false;
+    }
+    const btn = buttonColor.trim();
+    if (btn && !parseHexColorOptional(btn)) {
+      setSaving(false);
+      setError("Toolbar button color must be a hex value like #801ed7.");
+      return false;
+    }
+    const wst = workstreamGradientTopColor.trim();
+    const wsb = workstreamGradientBottomColor.trim();
+    if (!isAiDecisioningStudio) {
+      if (wst && !parseHexColorOptional(wst)) {
+        setSaving(false);
+        setError("Workstream gradient top color must be a hex value like #300266.");
+        return false;
+      }
+      if (wsb && !parseHexColorOptional(wsb)) {
+        setSaving(false);
+        setError("Workstream gradient bottom color must be a hex value like #801ed7.");
+        return false;
+      }
+    }
 
     const response = await fetch(`/api/configs/${config.Config_ID}`, {
       method: "PATCH",
@@ -39,6 +90,15 @@ export function ConfigEditForm({ config }: Props) {
         industry,
         password,
         planOptionId: isAiDecisioningStudio ? PLAN_PACKAGE_FOR_AI_DECISIONING_STUDIO : planOptionId,
+        onboardingSessionTileColor: parseHexColorOptional(ob) ?? "",
+        customerActivityTileColor: parseHexColorOptional(cb) ?? "",
+        buttonColor: parseHexColorOptional(btn) ?? "",
+        ...(!isAiDecisioningStudio
+          ? {
+              workstreamGradientTopColor: parseHexColorOptional(wst) ?? "",
+              workstreamGradientBottomColor: parseHexColorOptional(wsb) ?? "",
+            }
+          : {}),
       }),
     });
 
@@ -46,32 +106,46 @@ export function ConfigEditForm({ config }: Props) {
     if (!response.ok) {
       const payload = (await response.json()) as { error?: string };
       setError(payload.error ?? "Unable to save config.");
-      return;
+      return false;
     }
 
+    return true;
+  }
+
+  async function onSubmit(event: FormEvent) {
+    event.preventDefault();
+    const ok = await performSave();
+    if (!ok) return;
     router.push("/employee/configs");
+    router.refresh();
+  }
+
+  async function onSaveAndGo() {
+    const ok = await performSave();
+    if (!ok) return;
+    router.push(`/employee/configs/${config.Config_ID}`);
     router.refresh();
   }
 
   return (
     <form onSubmit={onSubmit} className="rounded-2xl border border-[#d7ccf6] bg-white p-6 shadow-sm">
-      <h2 className="text-lg font-semibold text-[#2c1650]">Edit Config</h2>
+      <h2 className="text-base font-semibold text-[#2c1650]">Edit Config</h2>
       <div className="mt-4 grid gap-3 md:grid-cols-2">
-        <label className="flex flex-col gap-1 text-sm font-semibold text-[#2c1650]">
-          Title <span className="text-[#cf3a50]">*</span>
+        <label className="flex flex-col gap-1 text-xs font-semibold text-[#2c1650]">
+          Prospect name <span className="text-[#cf3a50]">*</span>
           <input
             value={title}
             onChange={(event) => setTitle(event.target.value)}
-            className="rounded-lg border border-[#d4c9f6] px-3 py-2 text-sm font-normal outline-none focus:border-[#8b30e7]"
-            placeholder="Title"
+            className="rounded-lg border border-[#d4c9f6] px-3 py-2 text-xs font-normal outline-none focus:border-[#8b30e7]"
+            placeholder="Prospect name"
           />
         </label>
-        <label className="flex flex-col gap-1 text-sm font-semibold text-[#2c1650]">
+        <label className="flex flex-col gap-1 text-xs font-semibold text-[#2c1650]">
           Industry <span className="text-[#cf3a50]">*</span>
           <select
             value={industry}
             onChange={(event) => setIndustry(event.target.value as IndustryType)}
-            className="rounded-lg border border-[#d4c9f6] px-3 py-2 text-sm font-normal outline-none focus:border-[#8b30e7]"
+            className="rounded-lg border border-[#d4c9f6] px-3 py-2 text-xs font-normal outline-none focus:border-[#8b30e7]"
           >
             {INDUSTRY_OPTIONS.map((item) => (
               <option key={item} value={item}>
@@ -80,7 +154,7 @@ export function ConfigEditForm({ config }: Props) {
             ))}
           </select>
         </label>
-        <label className="flex flex-col gap-1 text-sm font-semibold text-[#2c1650]">
+        <label className="flex flex-col gap-1 text-xs font-semibold text-[#2c1650]">
           Braze Product <span className="text-[#cf3a50]">*</span>
           <select
             value={productType}
@@ -95,7 +169,7 @@ export function ConfigEditForm({ config }: Props) {
                 );
               }
             }}
-            className="rounded-lg border border-[#d4c9f6] px-3 py-2 text-sm font-normal outline-none focus:border-[#8b30e7]"
+            className="rounded-lg border border-[#d4c9f6] px-3 py-2 text-xs font-normal outline-none focus:border-[#8b30e7]"
           >
             {PRODUCT_OPTIONS.map((item) => (
               <option key={item} value={item}>
@@ -105,40 +179,75 @@ export function ConfigEditForm({ config }: Props) {
           </select>
         </label>
         {!isAiDecisioningStudio && (
-          <label className="flex flex-col gap-1 text-sm font-semibold text-[#2c1650]">
+          <label className="flex flex-col gap-1 text-xs font-semibold text-[#2c1650]">
             Plan Package <span className="text-[#cf3a50]">*</span>
             <PlanTimelineSelect value={planOptionId} onChange={setPlanOptionId} size="sm" />
           </label>
         )}
-        <label className="flex flex-col gap-1 text-sm font-semibold text-[#2c1650] md:col-span-2">
+        <label className="flex flex-col gap-1 text-xs font-semibold text-[#2c1650] md:col-span-2">
           Password
           <input
             maxLength={8}
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            className="rounded-lg border border-[#d4c9f6] px-3 py-2 text-sm font-normal outline-none focus:border-[#8b30e7]"
+            className="rounded-lg border border-[#d4c9f6] px-3 py-2 text-xs font-normal outline-none focus:border-[#8b30e7]"
             placeholder="Password (optional)"
           />
-          <span className="text-xs font-normal text-[#6b5798]">
-            Optional. If blank on create, password defaults to title lowercase with no spaces.
+          <span className="text-[10px] font-normal text-[#6b5798]">
+            Optional. If blank on create, password defaults to prospect name lowercase with no spaces.
           </span>
         </label>
       </div>
-      {error && <p className="mt-3 text-sm text-[#cf3a50]">{error}</p>}
-      <div className="mt-4 flex justify-end gap-2">
+
+      <div className="mt-4">
+        <ConfigTileCategoryColorPickers
+          variant="page"
+          disabled={saving}
+          onboardingSessionTileColor={onboardingSessionTileColor}
+          customerActivityTileColor={customerActivityTileColor}
+          buttonColor={buttonColor}
+          customerActivityColorLabel={`${(title.trim() || config.Title).trim() || "Prospect"} Activity`}
+          onChangeOnboarding={setOnboardingSessionTileColor}
+          onChangeCustomer={setCustomerActivityTileColor}
+          onChangeButton={setButtonColor}
+        />
+        {!isAiDecisioningStudio && (
+          <div className="mt-4">
+            <ConfigWorkstreamGradientColorPickers
+              variant="page"
+              disabled={saving}
+              workstreamGradientTopColor={workstreamGradientTopColor}
+              workstreamGradientBottomColor={workstreamGradientBottomColor}
+              onChangeTop={setWorkstreamGradientTopColor}
+              onChangeBottom={setWorkstreamGradientBottomColor}
+            />
+          </div>
+        )}
+      </div>
+
+      {error && <p className="mt-3 text-xs text-[#cf3a50]">{error}</p>}
+      <div className="mt-4 flex flex-wrap justify-end gap-2">
         <button
           type="button"
           onClick={() => router.push("/employee/configs")}
-          className="rounded-md border border-[#d4c9f6] px-4 py-2 text-sm font-semibold text-[#4a2b7a]"
+          className="rounded-md border border-[#d4c9f6] px-3 py-1.5 text-[11px] font-semibold leading-tight text-[#4a2b7a]"
         >
           Cancel
         </button>
         <button
           type="submit"
           disabled={saving}
-          className="rounded-md bg-gradient-to-r from-[#8325db] to-[#f35f9c] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          className="rounded-md border border-[#8b30e7] bg-[#f8f4ff] px-3 py-1.5 text-[11px] font-semibold leading-tight text-[#8b30e7] outline-none hover:bg-[#efe6ff] disabled:opacity-50"
         >
-          {saving ? "Saving..." : "Save Config"}
+          {saving ? "Saving..." : "Save"}
+        </button>
+        <button
+          type="button"
+          disabled={saving}
+          onClick={onSaveAndGo}
+          className="rounded-md bg-gradient-to-r from-[#8325db] to-[#f35f9c] px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
+        >
+          {saving ? "Saving..." : "Save & Go"}
         </button>
       </div>
     </form>

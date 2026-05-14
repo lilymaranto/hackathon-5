@@ -3,6 +3,9 @@ import type { PlanOptionId } from "@/lib/types";
 /** DOM id prefix for scroll targets (`${BRAZE_RESOURCE_ROW_ID_PREFIX}${row.id}`). */
 export const BRAZE_RESOURCE_ROW_ID_PREFIX = "braze-res-";
 
+/** Scroll target for the whole Roles & Responsibilities / Recommended Resources block (see `BrazeCoreResourcesChart`). */
+export const BRAZE_RESOURCES_CHART_SECTION_ID = "braze-core-resources-chart";
+
 export type GrowthSilverResourceRow = {
   id: string;
   linkLabel: string;
@@ -311,18 +314,83 @@ export function brazeResourceRowDomId(rowId: string): string {
   return `${BRAZE_RESOURCE_ROW_ID_PREFIX}${rowId}`;
 }
 
-export function getBrazeCoreResourceDrawerLinks(
+function normalizeAttendeeMatchLine(s: string): string {
+  return s.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function maxLabelLength(row: { labels: string[] }): number {
+  return row.labels.reduce((m, l) => Math.max(m, l.length), 0);
+}
+
+/** Split a bullet into parts that might contain an embedded role label (e.g. "Alex — Marketing Lead"). */
+function attendeeMatchSegments(line: string): string[] {
+  const t = line.trim();
+  if (!t) return [];
+  const pieces = t
+    .split(/\s*(?:\r?\n|[,;|]|(?:\s+-\s+)|(?:\s+–\s+)|(?:\s+—\s+))\s*/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const raw = pieces.includes(t) ? pieces : [...pieces, t];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const p of [...raw].sort((a, b) => b.length - a.length)) {
+    const k = normalizeAttendeeMatchLine(p);
+    if (!k || seen.has(k)) continue;
+    seen.add(k);
+    out.push(p);
+  }
+  return out;
+}
+
+function matchNormalizedLineToDomId(
+  n: string,
+  sorted: { id: string; labels: string[] }[],
+): string | undefined {
+  for (const r of sorted) {
+    for (const lab of r.labels) {
+      const ln = normalizeAttendeeMatchLine(lab);
+      if (!ln) continue;
+      if (n === ln) return brazeResourceRowDomId(r.id);
+    }
+  }
+  const MIN_SUBSTRING = 4;
+  for (const r of sorted) {
+    for (const lab of r.labels) {
+      const ln = normalizeAttendeeMatchLine(lab);
+      if (!ln || ln.length < MIN_SUBSTRING) continue;
+      if (n.includes(ln)) return brazeResourceRowDomId(r.id);
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Map a suggested-attendee bullet to a resources-chart row DOM id when the text equals or contains
+ * a known role label (including after commas / dashes, e.g. "Jane Doe — Marketing Lead").
+ */
+export function brazeResourceRowDomIdForAttendeeLine(
+  line: string,
   planOptionId: PlanOptionId,
   emailEnabled: boolean,
-): { id: string; label: string }[] {
-  if (planOptionId === "growth_silver") {
-    return filterGrowthSilverRows(GROWTH_SILVER_RESOURCE_ROWS, emailEnabled).map((r) => ({
-      id: brazeResourceRowDomId(r.id),
-      label: r.linkLabel,
-    }));
+): string | undefined {
+  const rows =
+    planOptionId === "growth_silver"
+      ? filterGrowthSilverRows(GROWTH_SILVER_RESOURCE_ROWS, emailEnabled).map((r) => ({
+          id: r.id,
+          labels: [r.linkLabel],
+        }))
+      : filterStandardBrazeRows(STANDARD_BRAZE_RESOURCE_ROWS, emailEnabled).map((r) => ({
+          id: r.id,
+          labels: [r.linkLabel, ...r.profileLines],
+        }));
+
+  const sorted = [...rows].sort((a, b) => maxLabelLength(b) - maxLabelLength(a));
+
+  for (const seg of attendeeMatchSegments(line)) {
+    const n = normalizeAttendeeMatchLine(seg);
+    if (!n) continue;
+    const hit = matchNormalizedLineToDomId(n, sorted);
+    if (hit) return hit;
   }
-  return filterStandardBrazeRows(STANDARD_BRAZE_RESOURCE_ROWS, emailEnabled).map((r) => ({
-    id: brazeResourceRowDomId(r.id),
-    label: r.linkLabel,
-  }));
+  return undefined;
 }
