@@ -1166,7 +1166,7 @@ function BrazeCoreSwimlaneSortableRow(props: BrazeCoreSwimlaneSortableRowProps) 
         {...(props.sortEnabled ? { ...attributes, ...listeners } : {})}
       >
         <span
-          className="w-full max-w-[85px] text-[13px] font-semibold leading-tight drop-shadow-sm"
+          className="w-full max-w-[85px] text-[11px] font-semibold leading-tight drop-shadow-sm"
           style={{ color: labelColor }}
           onDoubleClick={(e) => {
             e.stopPropagation();
@@ -3679,7 +3679,7 @@ export function CanvasBoard({
                 className="grid border-b border-[#E8E5F8]"
                 style={{ gridTemplateColumns: `${BRAZE_CORE_SWIMLANE_RAIL_COL_PX}px 1fr` }}
               >
-                <div className="border-r border-[#E8E5F8] px-2 py-[8px] text-[15px] font-semibold text-[#300266]">
+                <div className="flex items-center justify-center border-r border-[#E8E5F8] px-2 py-[5px] text-center text-[13px] font-semibold leading-tight text-[#300266]">
                   Phases
                 </div>
                 <div
@@ -3695,7 +3695,7 @@ export function CanvasBoard({
                   {timelineConfig.phases.map((phase, i) => (
                     <div
                       key={`phase-${phase.name}`}
-                      className="border-l border-[#E8E5F8] px-2 py-[8px] text-center text-[13px] font-semibold text-[#4C3B78]"
+                      className="flex items-center justify-center border-l border-[#E8E5F8] px-2 py-[5px] text-center text-[11px] font-semibold leading-tight text-[#4C3B78]"
                       style={{ gridColumn: `span ${phaseGridSpans[i]!}` }}
                     >
                       {phase.name}
@@ -3708,7 +3708,7 @@ export function CanvasBoard({
                   className="grid border-b border-[#E8E5F8]"
                   style={{ gridTemplateColumns: `${BRAZE_CORE_SWIMLANE_RAIL_COL_PX}px 1fr` }}
                 >
-                  <div className="border-r border-[#E8E5F8] px-2 py-[8px] text-[15px] font-semibold text-[#300266]">
+                  <div className="flex items-center justify-center border-r border-[#E8E5F8] px-2 py-[5px] text-center text-[13px] font-semibold leading-tight text-[#300266]">
                     Months
                   </div>
                   <div
@@ -3718,7 +3718,7 @@ export function CanvasBoard({
                     {timelineConfig.months.map((month, i) => (
                       <div
                         key={`month-${month.name}`}
-                        className="border-l border-[#E8E5F8] px-2 py-[8px] text-center text-[13px] font-semibold text-[#6B5A9A]"
+                        className="flex items-center justify-center border-l border-[#E8E5F8] px-2 py-[5px] text-center text-[11px] font-semibold leading-tight text-[#6B5A9A]"
                         style={{ gridColumn: `span ${monthGridSpans[i]!}` }}
                       >
                         {month.name}
@@ -3732,7 +3732,7 @@ export function CanvasBoard({
                   className="grid border-b border-[#E8E5F8]"
                   style={{ gridTemplateColumns: `${BRAZE_CORE_SWIMLANE_RAIL_COL_PX}px 1fr` }}
                 >
-                  <div className="border-r border-[#E8E5F8] px-2 py-[8px] text-[15px] font-semibold text-[#300266]">
+                  <div className="flex items-center justify-center border-r border-[#E8E5F8] px-2 py-[5px] text-center text-[13px] font-semibold leading-tight text-[#300266]">
                     Weeks
                   </div>
                   <div
@@ -3742,7 +3742,7 @@ export function CanvasBoard({
                     {Array.from({ length: durationWeeks }, (_, index) => (
                       <div
                         key={index + 1}
-                        className="border-l border-[#E8E5F8] px-2 py-[8px] text-center text-[13px] font-semibold text-[#6B5A9A]"
+                        className="flex items-center justify-center border-l border-[#E8E5F8] px-2 py-[5px] text-center text-[11px] font-semibold leading-tight text-[#6B5A9A]"
                         style={{ gridColumn: `span ${GROWTH_SILVER_COLUMNS_PER_WEEK}` }}
                       >
                         {`Week ${index + 1}`}
