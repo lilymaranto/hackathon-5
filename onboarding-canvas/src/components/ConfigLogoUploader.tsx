@@ -13,13 +13,6 @@ import {
 
 const MAX_LOGO_BYTES = 1_500_000;
 
-type LogoLibraryItem = {
-  configId: string;
-  title: string;
-  logoDataUrl: string;
-  updatedAt?: string;
-};
-
 type Props = {
   logoDataUrl: string;
   logoFileName: string;
@@ -98,10 +91,6 @@ export function ConfigLogoUploader({
   const [cropAspect, setCropAspect] = useState(3);
   const [cropAreaPixels, setCropAreaPixels] = useState<Area | null>(null);
   const [isCropping, setIsCropping] = useState(false);
-  const [libraryOpen, setLibraryOpen] = useState(false);
-  const [libraryLoading, setLibraryLoading] = useState(false);
-  const [libraryError, setLibraryError] = useState<string | null>(null);
-  const [libraryItems, setLibraryItems] = useState<LogoLibraryItem[]>([]);
 
   const selectedName = useMemo(() => {
     if (logoFileName.trim()) return logoFileName.trim();
@@ -209,34 +198,6 @@ export function ConfigLogoUploader({
     }
   }, [cropAreaPixels, cropSourceDataUrl, cropSourceName, onChangeLogo, onError]);
 
-  const loadLibrary = useCallback(async () => {
-    if (disabled) return;
-    setLibraryLoading(true);
-    setLibraryError(null);
-    try {
-      const response = await fetch("/api/configs/logos");
-      const payload = (await response.json()) as { data?: LogoLibraryItem[]; error?: string };
-      if (!response.ok) {
-        setLibraryError(payload.error ?? "Unable to load media library.");
-        return;
-      }
-      setLibraryItems(payload.data ?? []);
-    } catch {
-      setLibraryError("Unable to load media library.");
-    } finally {
-      setLibraryLoading(false);
-    }
-  }, [disabled]);
-
-  const toggleLibrary = useCallback(() => {
-    if (disabled) return;
-    const next = !libraryOpen;
-    setLibraryOpen(next);
-    if (next && libraryItems.length === 0 && !libraryLoading) {
-      void loadLibrary();
-    }
-  }, [disabled, libraryOpen, libraryItems.length, libraryLoading, loadLibrary]);
-
   return (
     <div>
       <label className="mb-[4px] block text-[12px] font-semibold text-[#2c1650]">Logo Optional.</label>
@@ -279,49 +240,8 @@ export function ConfigLogoUploader({
           >
             Remove photo
           </button>
-          <button
-            type="button"
-            disabled={disabled}
-            onClick={toggleLibrary}
-            className="rounded-md border border-[#d4c9f6] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#4a2b7a] hover:bg-[#f6efff] disabled:opacity-50"
-          >
-            {libraryOpen ? "Hide media library" : "Media library"}
-          </button>
         </div>
       </div>
-      {libraryOpen ? (
-        <div className="mb-2 rounded-md border border-[#e8dff9] bg-white p-2">
-          {libraryLoading ? (
-            <p className="text-[10px] text-[#6b5798]">Loading logos...</p>
-          ) : libraryError ? (
-            <p className="text-[10px] text-[#cf3a50]">{libraryError}</p>
-          ) : libraryItems.length === 0 ? (
-            <p className="text-[10px] text-[#6b5798]">No saved logos yet.</p>
-          ) : (
-            <div className="grid max-h-44 grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3">
-              {libraryItems.map((item) => (
-                <button
-                  key={`${item.configId}-${item.updatedAt ?? "logo"}`}
-                  type="button"
-                  onClick={() => {
-                    onChangeLogo(item.logoDataUrl, `${item.title} logo`);
-                    onError(null);
-                  }}
-                  className="rounded-md border border-[#e8dff9] bg-[#fcfbff] p-2 text-left hover:bg-[#f6efff]"
-                  title={`Use logo from ${item.title}`}
-                >
-                  <img
-                    src={item.logoDataUrl}
-                    alt={`${item.title} logo`}
-                    className="h-9 w-full object-contain"
-                  />
-                  <p className="mt-1 truncate text-[10px] font-semibold text-[#4a2b7a]">{item.title}</p>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      ) : null}
       {logoDataUrl ? (
         <div className="mt-[7px] flex flex-wrap items-center gap-[0.675rem]">
           <img
