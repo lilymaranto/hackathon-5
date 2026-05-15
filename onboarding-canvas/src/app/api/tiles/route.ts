@@ -70,6 +70,7 @@ export async function POST(request: NextRequest) {
         | "Start_Week"
         | "Span_Weeks"
         | "Stack_Order"
+        | "Row_Span"
         | "Category"
         | "Notes"
         | "Description"
@@ -98,6 +99,7 @@ export async function POST(request: NextRequest) {
       Start_Week: Math.max(1, Math.round(Number(t.Start_Week) || 1)),
       Span_Weeks: Math.max(1, Math.round(Number(t.Span_Weeks) || 1)),
       Stack_Order: Math.max(1, Math.round(Number(t.Stack_Order) || 1)),
+      Row_Span: Math.max(1, Math.round(Number(t.Row_Span) || 1)),
       Category: category,
       Notes: t.Notes ?? "",
       Description: t.Description ?? "",

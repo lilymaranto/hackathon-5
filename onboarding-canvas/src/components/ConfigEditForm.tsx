@@ -1,6 +1,7 @@
 "use client";
 
 import { ConfigTileCategoryColorPickers } from "@/components/ConfigTileCategoryColorPickers";
+import { ConfigLogoUploader } from "@/components/ConfigLogoUploader";
 import { ConfigWorkstreamGradientColorPickers } from "@/components/ConfigWorkstreamGradientColorPickers";
 import { PlanTimelineSelect } from "@/components/PlanTimelineSelect";
 import {
@@ -37,6 +38,8 @@ export function ConfigEditForm({ config }: Props) {
   const [workstreamGradientBottomColor, setWorkstreamGradientBottomColor] = useState(
     config.workstreamGradientBottomColor ?? "",
   );
+  const [logoDataUrl, setLogoDataUrl] = useState(config.logoDataUrl ?? "");
+  const [logoFileName, setLogoFileName] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isAiDecisioningStudio = productType === "AI Decisioning Studio";
@@ -93,6 +96,7 @@ export function ConfigEditForm({ config }: Props) {
         onboardingSessionTileColor: parseHexColorOptional(ob) ?? "",
         customerActivityTileColor: parseHexColorOptional(cb) ?? "",
         buttonColor: parseHexColorOptional(btn) ?? "",
+        logoDataUrl: logoDataUrl.trim(),
         ...(!isAiDecisioningStudio
           ? {
               workstreamGradientTopColor: parseHexColorOptional(wst) ?? "",
@@ -132,7 +136,9 @@ export function ConfigEditForm({ config }: Props) {
       <h2 className="text-base font-semibold text-[#2c1650]">Edit Config</h2>
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         <label className="flex flex-col gap-1 text-xs font-semibold text-[#2c1650]">
-          Prospect name <span className="text-[#cf3a50]">*</span>
+          <span className="inline-flex w-fit items-center gap-0.5">
+            Prospect name <span className="text-[#cf3a50]">*</span>
+          </span>
           <input
             value={title}
             onChange={(event) => setTitle(event.target.value)}
@@ -141,7 +147,9 @@ export function ConfigEditForm({ config }: Props) {
           />
         </label>
         <label className="flex flex-col gap-1 text-xs font-semibold text-[#2c1650]">
-          Industry <span className="text-[#cf3a50]">*</span>
+          <span className="inline-flex w-fit items-center gap-0.5">
+            Industry <span className="text-[#cf3a50]">*</span>
+          </span>
           <select
             value={industry}
             onChange={(event) => setIndustry(event.target.value as IndustryType)}
@@ -155,7 +163,9 @@ export function ConfigEditForm({ config }: Props) {
           </select>
         </label>
         <label className="flex flex-col gap-1 text-xs font-semibold text-[#2c1650]">
-          Braze Product <span className="text-[#cf3a50]">*</span>
+          <span className="inline-flex w-fit items-center gap-0.5">
+            Braze Product <span className="text-[#cf3a50]">*</span>
+          </span>
           <select
             value={productType}
             onChange={(event) => {
@@ -180,7 +190,9 @@ export function ConfigEditForm({ config }: Props) {
         </label>
         {!isAiDecisioningStudio && (
           <label className="flex flex-col gap-1 text-xs font-semibold text-[#2c1650]">
-            Plan Package <span className="text-[#cf3a50]">*</span>
+            <span className="inline-flex w-fit items-center gap-0.5">
+              Plan Package <span className="text-[#cf3a50]">*</span>
+            </span>
             <PlanTimelineSelect value={planOptionId} onChange={setPlanOptionId} size="sm" />
           </label>
         )}
@@ -197,6 +209,23 @@ export function ConfigEditForm({ config }: Props) {
             Optional. If blank on create, password defaults to prospect name lowercase with no spaces.
           </span>
         </label>
+      </div>
+
+      <div className="mt-4">
+        <ConfigLogoUploader
+          logoDataUrl={logoDataUrl}
+          logoFileName={logoFileName}
+          disabled={saving}
+          onChangeLogo={(nextDataUrl, nextFileName) => {
+            setLogoDataUrl(nextDataUrl);
+            setLogoFileName(nextFileName);
+          }}
+          onRemoveLogo={() => {
+            setLogoDataUrl("");
+            setLogoFileName("");
+          }}
+          onError={setError}
+        />
       </div>
 
       <div className="mt-4">

@@ -26,7 +26,7 @@ export default async function EmployeeConfigPage({
   const planTitle = formatConfigPlanHeading(config);
 
   return (
-    <main className="mx-auto flex min-h-screen w-[95vw] max-w-none flex-col gap-4 p-4 md:p-6">
+    <main className="mx-auto flex min-h-screen w-[95vw] max-w-none flex-col gap-4 px-4 pb-4 pt-2 md:px-6 md:pb-6 md:pt-3">
       <CanvasBoard
         config={config}
         tiles={tiles}

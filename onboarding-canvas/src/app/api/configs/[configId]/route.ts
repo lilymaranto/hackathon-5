@@ -58,6 +58,8 @@ export async function PATCH(
       buttonColor?: string;
       workstreamGradientTopColor?: string;
       workstreamGradientBottomColor?: string;
+      logoDataUrl?: string;
+      logoDisplayHeightPx?: number;
       brazeCoreWorkstreamOrder?: BrazeWorkstreamOrderEntry[] | Workstream[];
       timelineAnnotation?: TimelineAnnotationDocument | unknown;
       TimelineAnnotation?: TimelineAnnotationDocument | string | unknown;
@@ -143,6 +145,10 @@ export async function PATCH(
       ...(hasButtonKey ? { buttonColor: btn } : {}),
       ...(hasWsTopKey ? { workstreamGradientTopColor: wst } : {}),
       ...(hasWsBottomKey ? { workstreamGradientBottomColor: wsb } : {}),
+      ...(body.logoDataUrl !== undefined ? { logoDataUrl: body.logoDataUrl } : {}),
+      ...(body.logoDisplayHeightPx !== undefined
+        ? { logoDisplayHeightPx: Number(body.logoDisplayHeightPx) }
+        : {}),
       ...(hasWsOrderKey
         ? {
             brazeCoreWorkstreamOrder: normalizeBrazeCoreWorkstreamOrder(

@@ -1,8 +1,8 @@
-import { ConfigCreateForm } from "@/components/ConfigCreateForm";
 import { ConfigsMineToggle } from "@/components/ConfigsMineToggle";
 import { ConfigsTable } from "@/components/ConfigsTable";
 import { ConfigRecord } from "@/lib/types";
 import { headers } from "next/headers";
+import Link from "next/link";
 
 async function getConfigs(search?: string, mine?: boolean) {
   const headerList = await headers();
@@ -41,7 +41,12 @@ export default async function EmployeeConfigsPage({
       <header className="flex flex-col gap-5">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <h1 className="text-3xl font-semibold text-[#2c1650]">Configurations</h1>
-          <ConfigCreateForm />
+          <Link
+            href="/employee/configs/create"
+            className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#8325db] to-[#f35f9c] px-5 py-2.5 text-[14px] font-semibold text-white shadow-sm transition hover:opacity-90"
+          >
+            Create Config
+          </Link>
         </div>
         <div className="flex w-full flex-wrap items-center justify-between gap-x-6 gap-y-3">
           <ConfigsMineToggle />

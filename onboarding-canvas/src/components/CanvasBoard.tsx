@@ -7,6 +7,7 @@ import {
 import { AddSwimlaneTilePanel } from "@/components/AddSwimlaneTilePanel";
 import { BrazeCoreResourcesChart } from "@/components/BrazeCoreResourcesChart";
 import { BrazeCoreSpanResizeHandle } from "@/components/BrazeCoreSpanResizeHandle";
+import { ConfigLogoUploader } from "@/components/ConfigLogoUploader";
 import { ConfigTileCategoryColorPickers } from "@/components/ConfigTileCategoryColorPickers";
 import { ConfigWorkstreamGradientColorPickers } from "@/components/ConfigWorkstreamGradientColorPickers";
 import { TileDrawer } from "@/components/TileDrawer";
@@ -94,7 +95,7 @@ import { ArrowBigDown, ArrowLeft, Plus, Star } from "lucide-react";
 import { CSS } from "@dnd-kit/utilities";
 import Link from "next/link";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
 /** AI Decisioning lanes: prefer pointer-inside row hit targets so drops map to the lane under the cursor (default closest-center skewed toward lane one). */
@@ -148,6 +149,18 @@ const TILE_HEIGHT_PX = BRAZE_CORE_TILE_HEIGHT_PX;
 const ADS_CHEVRON_TILE_HEIGHT_PX = scaleYpx(108);
 const ADS_CHEVRON_TOP_OFFSET_PX = scaleYpx(8);
 const TILE_LANE_GAP = scaleYpx(8);
+const TECH_FIRST_ROW_HEIGHT_MULTIPLIER = 1.5;
+
+function normalizedRowSpan(value: number | undefined): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 1;
+  return Math.max(1, Math.round(parsed));
+}
+
+function laneHeightPx(baseTileHeightPx: number, rowSpan: number): number {
+  const span = normalizedRowSpan(rowSpan);
+  return span * baseTileHeightPx + (span - 1) * TILE_LANE_GAP;
+}
 /**
  * When two same-category chevrons interlock, pull them slightly apart horizontally so the canvas
  * shows through as a gap (reference: chevron tips + notch stay visible; avoids a flat vertical bar).
@@ -233,7 +246,7 @@ function isAdsGoliveMilestone(tile: TileRecord): boolean {
 /** Lane-two bar “Conduct post go-live testing” — Go-live (random) sits under this tile. */
 const ADS_POST_GOLIVE_BAR_TILE_ID = "ads_lane2_post_golive_test";
 
-type TileWithLane = TileRecord & { lane: number };
+type TileWithLane = TileRecord & { lane: number; rowSpan: number };
 
 /** Left edge of a week column — milestones use a bottom-left caret on this line. */
 function adsMilestoneWeekLeftPct(tile: TileRecord, timelineColumns: number): number {
@@ -253,7 +266,7 @@ function adsGoliveRandomBelowBarTopPx(anchor: TileWithLane): number {
   const barBottom =
     ADS_CHEVRON_TOP_OFFSET_PX +
     anchor.lane * (ADS_CHEVRON_TILE_HEIGHT_PX + TILE_LANE_GAP) +
-    ADS_CHEVRON_TILE_HEIGHT_PX;
+    laneHeightPx(ADS_CHEVRON_TILE_HEIGHT_PX, anchor.rowSpan);
   return barBottom + ADS_GOLIVE_RANDOM_CLEARANCE_BELOW_ANCHOR_PX;
 }
 
@@ -383,12 +396,29 @@ function assignRowLanesByWeek(
   columnIndexes: number[],
   planOptionId: PlanOptionId,
   durationWeeks: number,
+  enforceStackOrderLanes: boolean,
 ): TileWithLane[] {
   const units = (tile: TileRecord) => getTileTimelineUnits(planOptionId, tile, durationWeeks);
 
   const hasWeeklyAlignment = rowTiles.some((tile) => tile.Tile_ID === "weekly_alignment");
-  const laneEndUnits: number[] = hasWeeklyAlignment ? [0] : [];
+  const laneFloor = hasWeeklyAlignment ? 1 : 0;
+  const laneEndUnits: number[] = !enforceStackOrderLanes && hasWeeklyAlignment ? [0] : [];
   const output: TileWithLane[] = [];
+
+  const canFitAtLane = (candidateLane: number, startUnit: number, rowSpan: number): boolean => {
+    if (candidateLane < laneFloor) return false;
+    for (let offset = 0; offset < rowSpan; offset += 1) {
+      const occupiedUntil = laneEndUnits[candidateLane + offset] ?? 0;
+      if (startUnit <= occupiedUntil) return false;
+    }
+    return true;
+  };
+
+  const occupyLaneRange = (lane: number, rowSpan: number, tileEndUnit: number) => {
+    for (let offset = 0; offset < rowSpan; offset += 1) {
+      laneEndUnits[lane + offset] = tileEndUnit;
+    }
+  };
 
   for (const columnIndex of columnIndexes) {
     const startTiles = rowTiles
@@ -403,32 +433,62 @@ function assignRowLanesByWeek(
       });
 
     for (const tile of startTiles) {
-      const tileEndUnit = units(tile).endUnit;
+      const tu = units(tile);
+      const tileEndUnit = tu.endUnit;
+      const rowSpan = normalizedRowSpan(tile.Row_Span);
       if (tile.Tile_ID === "weekly_alignment") {
-        laneEndUnits[0] = tileEndUnit;
-        output.push({ ...tile, lane: 0 });
+        occupyLaneRange(0, rowSpan, tileEndUnit);
+        output.push({ ...tile, lane: 0, rowSpan });
         continue;
       }
 
-      const laneSearchStart = hasWeeklyAlignment ? 1 : 0;
-      let lane = -1;
-      for (let i = laneSearchStart; i < laneEndUnits.length; i += 1) {
-        if (units(tile).startUnit > laneEndUnits[i]!) {
-          lane = i;
-          break;
-        }
-      }
-      if (lane === -1) {
-        lane = laneEndUnits.length;
-        laneEndUnits.push(tileEndUnit);
+      let lane = laneFloor;
+      if (enforceStackOrderLanes) {
+        const normalizedStackOrder = Math.max(1, Math.round(tile.Stack_Order || 1));
+        const stackLane = Math.max(0, normalizedStackOrder - 1);
+        lane = hasWeeklyAlignment ? Math.max(1, stackLane) : stackLane;
       } else {
-        laneEndUnits[lane] = tileEndUnit;
+        lane = laneFloor;
       }
-      output.push({ ...tile, lane });
+      while (!canFitAtLane(lane, tu.startUnit, rowSpan)) {
+        lane += 1;
+      }
+      occupyLaneRange(lane, rowSpan, tileEndUnit);
+      output.push({ ...tile, lane, rowSpan });
     }
   }
 
   return output;
+}
+
+const TILE_HOVER_POP_CLASSES =
+  "group transition-all duration-150 hover:z-[70] hover:shadow-[0_10px_26px_rgba(32,13,63,0.34)] hover:ring-2 hover:ring-[#9d63ea]/70 hover:brightness-105";
+const TILE_HOVER_POP_CLASSES_MILESTONE =
+  "group transition-all duration-150 hover:z-[70] hover:ring-2 hover:ring-[#9d63ea]/70 hover:brightness-105";
+
+function HoverRevealTileText({
+  text,
+  className,
+  clampLines = 2,
+}: {
+  text: string;
+  className?: string;
+  clampLines?: 2 | 3 | 4;
+}) {
+  return (
+    <span className={clsx("relative block min-w-0 max-w-full", className)}>
+      <span
+        style={{
+          display: "-webkit-box",
+          WebkitBoxOrient: "vertical",
+          WebkitLineClamp: clampLines,
+          overflow: "hidden",
+        }}
+      >
+        {text}
+      </span>
+    </span>
+  );
 }
 
 function DraggableTile({
@@ -438,6 +498,7 @@ function DraggableTile({
   onOpen,
   tileCategoryColors,
   milestoneAccent,
+  lineClamp,
 }: {
   tile: TileRecord;
   readOnly: boolean;
@@ -445,6 +506,7 @@ function DraggableTile({
   onOpen: (tile: TileRecord) => void;
   tileCategoryColors: ResolvedTileCategoryColors;
   milestoneAccent: string;
+  lineClamp?: 2 | 3 | 4;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: tileStableKey(tile),
@@ -452,16 +514,21 @@ function DraggableTile({
   });
 
   const categorySurface = brazeSwimlaneTileCategoryStyle(tileCategoryColors, tile.Category);
+  const milestone = tile.Category === "milestone";
+  const resolvedLineClamp = lineClamp ?? (normalizedRowSpan(tile.Row_Span) >= 2 ? 4 : 2);
 
   return (
     <button
       ref={setNodeRef}
       onClick={() => onOpen(tile)}
+      title={tile.Title}
       className={clsx(
-        "absolute flex h-7 items-center justify-center overflow-hidden rounded-md text-center leading-tight shadow-sm",
-        tile.Category === "milestone"
-          ? "z-[18] gap-1 border-2 border-white bg-white px-1 py-0.5 text-[8px] shadow-sm"
-          : "border-0 px-1.5 py-1 text-[9px]",
+        "absolute flex h-7 items-center justify-center overflow-visible rounded-md text-center leading-tight",
+        milestone
+          ? "z-[18] gap-1 border-2 border-white bg-white px-0.5 py-px text-[8px]"
+          : "border-0 px-[2px] py-px text-[9px]",
+        milestone ? TILE_HOVER_POP_CLASSES_MILESTONE : TILE_HOVER_POP_CLASSES,
+        !milestone && "shadow-sm",
         !readOnly && tile.Category !== "milestone" && "cursor-grab active:cursor-grabbing",
         isDragging && "z-20 opacity-80",
       )}
@@ -473,7 +540,7 @@ function DraggableTile({
       {...listeners}
       {...attributes}
     >
-      {tile.Category === "milestone" ? (
+      {milestone ? (
         <span
           className="inline-flex items-center justify-center gap-1"
           style={{ color: milestoneAccent }}
@@ -485,30 +552,18 @@ function DraggableTile({
             size={17}
             aria-hidden
           />
-          <span
+          <HoverRevealTileText
+            text={tile.Title}
             className="font-semibold"
-            style={{
-              display: "-webkit-box",
-              WebkitBoxOrient: "vertical",
-              WebkitLineClamp: 2,
-              overflow: "hidden",
-            }}
-          >
-            {tile.Title}
-          </span>
+            clampLines={resolvedLineClamp}
+          />
         </span>
       ) : (
-        <span
+        <HoverRevealTileText
+          text={tile.Title}
           className="max-w-full"
-          style={{
-            display: "-webkit-box",
-            WebkitBoxOrient: "vertical",
-            WebkitLineClamp: 2,
-            overflow: "hidden",
-          }}
-        >
-          {tile.Title}
-        </span>
+          clampLines={resolvedLineClamp}
+        />
       )}
     </button>
   );
@@ -520,27 +575,34 @@ function StaticTile({
   onOpen,
   tileCategoryColors,
   milestoneAccent,
+  lineClamp,
 }: {
   tile: TileRecord;
   style: CSSProperties;
   onOpen: (tile: TileRecord) => void;
   tileCategoryColors: ResolvedTileCategoryColors;
   milestoneAccent: string;
+  lineClamp?: 2 | 3 | 4;
 }) {
   const categorySurface = brazeSwimlaneTileCategoryStyle(tileCategoryColors, tile.Category);
+  const milestone = tile.Category === "milestone";
+  const resolvedLineClamp = lineClamp ?? (normalizedRowSpan(tile.Row_Span) >= 2 ? 4 : 2);
 
   return (
     <button
       onClick={() => onOpen(tile)}
+      title={tile.Title}
       className={clsx(
-        "absolute flex h-7 items-center justify-center overflow-hidden rounded-md text-center leading-tight shadow-sm",
-        tile.Category === "milestone"
-          ? "z-[18] gap-1 border-2 border-white bg-white px-1 py-0.5 text-[8px] shadow-sm"
-          : "border-0 px-1.5 py-1 text-[9px]",
+        "absolute flex h-7 items-center justify-center overflow-visible rounded-md text-center leading-tight",
+        milestone
+          ? "z-[18] gap-1 border-2 border-white bg-white px-0.5 py-px text-[8px]"
+          : "border-0 px-[2px] py-px text-[9px]",
+        milestone ? TILE_HOVER_POP_CLASSES_MILESTONE : TILE_HOVER_POP_CLASSES,
+        !milestone && "shadow-sm",
       )}
       style={{ ...style, ...(categorySurface ?? {}) }}
     >
-      {tile.Category === "milestone" ? (
+      {milestone ? (
         <span
           className="inline-flex items-center justify-center gap-1"
           style={{ color: milestoneAccent }}
@@ -552,29 +614,14 @@ function StaticTile({
             size={17}
             aria-hidden
           />
-          <span
+          <HoverRevealTileText
+            text={tile.Title}
             className="font-semibold"
-            style={{
-              display: "-webkit-box",
-              WebkitBoxOrient: "vertical",
-              WebkitLineClamp: 2,
-              overflow: "hidden",
-            }}
-          >
-            {tile.Title}
-          </span>
+            clampLines={resolvedLineClamp}
+          />
         </span>
       ) : (
-        <span
-          style={{
-            display: "-webkit-box",
-            WebkitBoxOrient: "vertical",
-            WebkitLineClamp: 2,
-            overflow: "hidden",
-          }}
-        >
-          {tile.Title}
-        </span>
+        <HoverRevealTileText text={tile.Title} clampLines={resolvedLineClamp} />
       )}
     </button>
   );
@@ -607,18 +654,20 @@ function DraggableAdsChevronTile({
   });
 
   const drag = CSS.Translate.toString(transform);
+  const lineClamp = normalizedRowSpan(tile.Row_Span) >= 2 ? 4 : 3;
   const surface = adsChevronSurfaceStyle(tile.Category, tileCategoryColors);
 
   return (
     <button
       ref={setNodeRef}
       type="button"
-      title="Interlocking timeline bar — drag to reposition week"
+      title={displayTitle}
       onClick={() => onOpen(tile)}
       className={clsx(
         "absolute flex items-center justify-center overflow-visible px-2 py-1",
         fillParent && "left-0 top-0 h-full w-full",
         surface.className,
+        TILE_HOVER_POP_CLASSES,
         !readOnly && "cursor-grab active:cursor-grabbing",
         isDragging && "opacity-95",
       )}
@@ -636,17 +685,11 @@ function DraggableAdsChevronTile({
       {...attributes}
     >
       <span className="inline-flex w-[90%] max-w-[90%] items-center justify-center">
-        <span
+        <HoverRevealTileText
+          text={displayTitle}
+          clampLines={lineClamp}
           className="min-w-0 flex-1 text-center text-[18px] font-medium leading-snug"
-          style={{
-            display: "-webkit-box",
-            WebkitBoxOrient: "vertical",
-            WebkitLineClamp: 3,
-            overflow: "hidden",
-          }}
-        >
-          {displayTitle}
-        </span>
+        />
       </span>
     </button>
   );
@@ -668,15 +711,17 @@ function StaticAdsChevronTile({
   tileCategoryColors: ResolvedTileCategoryColors;
 }) {
   const surface = adsChevronSurfaceStyle(tile.Category, tileCategoryColors);
+  const lineClamp = normalizedRowSpan(tile.Row_Span) >= 2 ? 4 : 3;
 
   return (
     <button
       type="button"
-      title="Interlocking timeline bar"
+      title={displayTitle}
       onClick={() => onOpen(tile)}
       className={clsx(
         "absolute flex items-center justify-center overflow-visible px-2 py-1",
         surface.className,
+        TILE_HOVER_POP_CLASSES,
       )}
       style={{
         height: ADS_CHEVRON_TILE_HEIGHT_PX,
@@ -687,17 +732,11 @@ function StaticAdsChevronTile({
         filter: ADS_CHEVRON_EDGE_FILTER,
       }}
     >
-      <span
+      <HoverRevealTileText
+        text={displayTitle}
+        clampLines={lineClamp}
         className="w-[90%] max-w-[90%] text-center text-[18px] font-medium leading-snug"
-        style={{
-          display: "-webkit-box",
-          WebkitBoxOrient: "vertical",
-          WebkitLineClamp: 3,
-          overflow: "hidden",
-        }}
-      >
-        {displayTitle}
-      </span>
+      />
     </button>
   );
 }
@@ -723,16 +762,18 @@ function DraggableAdsMilestoneTile({
   });
 
   const drag = CSS.Translate.toString(transform);
+  const lineClamp = normalizedRowSpan(tile.Row_Span) >= 2 ? 4 : 3;
 
   return (
     <button
       ref={setNodeRef}
       type="button"
-      title="Key milestone — drag to reposition week"
+      title={tile.Title}
       onClick={() => onOpen(tile)}
       className={clsx(
-        "absolute z-[45] flex max-w-[min(240px,46vw)] items-start gap-1.5 rounded-lg border-2 border-white bg-white px-2.5 py-1.5 text-left text-[14px] font-semibold leading-snug shadow-lg outline-none",
+        "absolute z-[45] flex max-w-[min(240px,46vw)] items-start gap-1.5 rounded-lg border-2 border-white bg-white px-2.5 py-1.5 text-left text-[14px] font-semibold leading-snug outline-none",
         adsFloatingMilestoneCaretClass(caretOnTop),
+        TILE_HOVER_POP_CLASSES_MILESTONE,
         !readOnly && "cursor-grab active:cursor-grabbing",
         isDragging && "z-[55] opacity-95",
       )}
@@ -753,17 +794,7 @@ function DraggableAdsMilestoneTile({
         stroke={accentColor}
         aria-hidden
       />
-      <span
-        style={{
-          display: "-webkit-box",
-          WebkitBoxOrient: "vertical",
-          WebkitLineClamp: 3,
-          overflow: "hidden",
-          color: accentColor,
-        }}
-      >
-        {tile.Title}
-      </span>
+      <HoverRevealTileText text={tile.Title} clampLines={lineClamp} className="font-semibold" />
     </button>
   );
 }
@@ -781,14 +812,16 @@ function StaticAdsMilestoneTile({
   accentColor: string;
   caretOnTop?: boolean;
 }) {
+  const lineClamp = normalizedRowSpan(tile.Row_Span) >= 2 ? 4 : 3;
   return (
     <button
       type="button"
-      title="Key milestone"
+      title={tile.Title}
       onClick={() => onOpen(tile)}
       className={clsx(
-        "absolute z-[45] flex max-w-[min(240px,46vw)] items-start gap-1.5 rounded-lg border-2 border-white bg-white px-2.5 py-1.5 text-left text-[14px] font-semibold leading-snug shadow-lg outline-none",
+        "absolute z-[45] flex max-w-[min(240px,46vw)] items-start gap-1.5 rounded-lg border-2 border-white bg-white px-2.5 py-1.5 text-left text-[14px] font-semibold leading-snug outline-none",
         adsFloatingMilestoneCaretClass(caretOnTop),
+        TILE_HOVER_POP_CLASSES_MILESTONE,
       )}
       style={{
         ...style,
@@ -804,16 +837,7 @@ function StaticAdsMilestoneTile({
         stroke={accentColor}
         aria-hidden
       />
-      <span
-        style={{
-          display: "-webkit-box",
-          WebkitBoxOrient: "vertical",
-          WebkitLineClamp: 3,
-          overflow: "hidden",
-        }}
-      >
-        {tile.Title}
-      </span>
+      <HoverRevealTileText text={tile.Title} clampLines={lineClamp} className="font-semibold" />
     </button>
   );
 }
@@ -1091,6 +1115,15 @@ function AdsCustomerRolesChart() {
 }
 
 const BRAZE_WS_SORT_PREFIX = "braze-ws-sort:";
+/** Braze Core swimlane view only: fixed left workstream label column width (px). */
+const BRAZE_CORE_SWIMLANE_RAIL_COL_PX = 125;
+const MIN_CONFIG_LOGO_HEIGHT_PX = 20;
+const MAX_CONFIG_LOGO_HEIGHT_PX = 60;
+
+function clampConfigLogoHeightPx(value: number): number {
+  if (!Number.isFinite(value)) return MAX_CONFIG_LOGO_HEIGHT_PX;
+  return Math.max(MIN_CONFIG_LOGO_HEIGHT_PX, Math.min(MAX_CONFIG_LOGO_HEIGHT_PX, Math.round(value)));
+}
 
 type BrazeCoreSwimlaneSortableRowProps = {
   workstream: { id: Workstream; label: string; color: string };
@@ -1118,8 +1151,12 @@ function BrazeCoreSwimlaneSortableRow(props: BrazeCoreSwimlaneSortableRowProps) 
     }
   }
   const labelColor = props.labelColor;
+  const rowGridStyle: CSSProperties = {
+    ...sortStyle,
+    gridTemplateColumns: `${BRAZE_CORE_SWIMLANE_RAIL_COL_PX}px 1fr`,
+  };
   return (
-    <div ref={setNodeRef} style={sortStyle} className="grid grid-cols-[165px_1fr] border-b border-[#E8E5F8]">
+    <div ref={setNodeRef} style={rowGridStyle} className="grid border-b border-[#E8E5F8]">
       <div
         className={clsx(
           "flex items-center justify-center border-r border-[#E8E5F8] px-3 py-3 text-center",
@@ -1129,7 +1166,7 @@ function BrazeCoreSwimlaneSortableRow(props: BrazeCoreSwimlaneSortableRowProps) 
         {...(props.sortEnabled ? { ...attributes, ...listeners } : {})}
       >
         <span
-          className="w-full max-w-[118px] text-[13px] font-semibold leading-tight drop-shadow-sm"
+          className="w-full max-w-[85px] text-[13px] font-semibold leading-tight drop-shadow-sm"
           style={{ color: labelColor }}
           onDoubleClick={(e) => {
             e.stopPropagation();
@@ -1211,6 +1248,14 @@ export function CanvasBoard({
   const [draftWorkstreamGradientBottomColor, setDraftWorkstreamGradientBottomColor] = useState(
     config.workstreamGradientBottomColor ?? "",
   );
+  const [draftLogoDataUrl, setDraftLogoDataUrl] = useState(config.logoDataUrl ?? "");
+  const [draftLogoFileName, setDraftLogoFileName] = useState("");
+  const [toolbarLogoHeightPx, setToolbarLogoHeightPx] = useState(
+    clampConfigLogoHeightPx(config.logoDisplayHeightPx ?? MAX_CONFIG_LOGO_HEIGHT_PX),
+  );
+  const [toolbarLogoResizeActive, setToolbarLogoResizeActive] = useState(false);
+  const toolbarLogoHeightRef = useRef(toolbarLogoHeightPx);
+  const toolbarLogoResizeOriginRef = useRef<{ startY: number; startHeight: number } | null>(null);
   const timelineRef = useRef<HTMLDivElement | null>(null);
   const brazeSwimlaneTimelineTrackRef = useRef<HTMLDivElement | null>(null);
   const annSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1224,6 +1269,21 @@ export function CanvasBoard({
   const showSaveToolbar = allowLayoutAndDrawerEdits;
   const defaultTopToolbarTitle = topToolbarTitle?.trim() ?? "";
   const effectiveTopToolbarTitle = config.chosenTitle?.trim() || defaultTopToolbarTitle;
+  const topToolbarLogoDataUrl = (config.logoDataUrl ?? "").trim();
+  const centeredToolbarHasLogo = Boolean(topToolbarLogoDataUrl && effectiveTopToolbarTitle);
+  const toolbarRowMinHeightPx = centeredToolbarHasLogo
+    ? Math.max(32, toolbarLogoHeightPx + 12)
+    : 32;
+  const isEmployeeConfigView = Boolean(topToolbarBackHref);
+  useEffect(() => {
+    const nextHeight = clampConfigLogoHeightPx(config.logoDisplayHeightPx ?? MAX_CONFIG_LOGO_HEIGHT_PX);
+    setToolbarLogoHeightPx(nextHeight);
+    toolbarLogoHeightRef.current = nextHeight;
+  }, [config.logoDisplayHeightPx, config.logoDataUrl]);
+
+  useEffect(() => {
+    toolbarLogoHeightRef.current = toolbarLogoHeightPx;
+  }, [toolbarLogoHeightPx]);
   /** Display name for chart keys (config `Title` in API / Caboodle). */
   const chartProspectLegendName = (config.Title ?? "").trim() || "Prospect";
   const isEnterprisePlatinum = config.planOptionId === "12_week";
@@ -1346,10 +1406,16 @@ export function CanvasBoard({
   );
   const renderReadOnly = !allowLayoutAndDrawerEdits || !isHydrated;
   const allowConfigColorEditing =
-    allowLayoutAndDrawerEdits && !customerPasswordView && Boolean(defaultTopToolbarTitle);
+    allowLayoutAndDrawerEdits &&
+    !readOnly &&
+    !customerPasswordView &&
+    isEmployeeConfigView &&
+    Boolean(defaultTopToolbarTitle);
 
   const resetConfigColorDrafts = useCallback(() => {
     setDraftChosenTitle(config.chosenTitle?.trim() || defaultTopToolbarTitle);
+    setDraftLogoDataUrl(config.logoDataUrl ?? "");
+    setDraftLogoFileName("");
     setDraftOnboardingSessionTileColor(config.onboardingSessionTileColor ?? "");
     setDraftCustomerActivityTileColor(config.customerActivityTileColor ?? "");
     setDraftButtonColor(config.buttonColor ?? "");
@@ -1357,6 +1423,7 @@ export function CanvasBoard({
     setDraftWorkstreamGradientBottomColor(config.workstreamGradientBottomColor ?? "");
   }, [
     config.chosenTitle,
+    config.logoDataUrl,
     defaultTopToolbarTitle,
     config.onboardingSessionTileColor,
     config.customerActivityTileColor,
@@ -1953,6 +2020,15 @@ export function CanvasBoard({
     [tileState, originalLayoutByUid, config.channels],
   );
 
+  /** Rows whose tiles still match server layout keep stack-order lanes; only rows with edits use collision packing. */
+  const workstreamsWithChangedLayoutTiles = useMemo(() => {
+    const s = new Set<Workstream>();
+    for (const t of changedTiles) {
+      s.add(t.Workstream);
+    }
+    return s;
+  }, [changedTiles]);
+
   const copyDirtyKeys = useMemo(() => {
     if (customerPasswordView) return new Set<string>();
     const set = new Set<string>();
@@ -2080,12 +2156,14 @@ export function CanvasBoard({
     if (!activeTile) return;
     if (!isWorkstreamVisibleForChannels(activeTile.Workstream, config.channels)) return;
 
-    const weekWidthPx = Math.max(60, timelineWidthRef.current / timelineColumns);
-    const movedByUnits = Math.round(event.delta.x / weekWidthPx);
     const u = getTileTimelineUnits(config.planOptionId, activeTile, durationWeeks);
     const spanUnits = u.endUnit - u.startUnit + 1;
     const maxStartUnit = Math.max(1, timelineColumns - spanUnits + 1);
-    const nextStartUnit = Math.min(maxStartUnit, Math.max(1, u.startUnit + movedByUnits));
+    const columnWidthPx = Math.max(1, timelineWidthRef.current / timelineColumns);
+    // Snap by the column containing the tile's LEFT edge after drag.
+    const leftEdgePx = (u.startUnit - 1) * columnWidthPx + event.delta.x;
+    const snappedStartUnit = Math.floor(leftEdgePx / columnWidthPx) + 1;
+    const nextStartUnit = Math.min(maxStartUnit, Math.max(1, snappedStartUnit));
     const nextStartWeek =
       config.planOptionId === "ignite_gold"
         ? igniteGoldColumnToWeek(nextStartUnit, durationWeeks)
@@ -2599,21 +2677,45 @@ export function CanvasBoard({
     !customerPasswordView &&
     !isAiDecisioningStudio &&
     brazeCoreView === "swimlane";
-
+  /**
+   * Preserve template stack-order vertical lanes per row until that row has layout edits;
+   * then use collision-aware packing for that row only (avoid repacking other workstreams).
+   */
   const coreRowContent = visibleWorkstreams.map((workstream) => {
     const rowTiles = tilesByWorkstream[workstream.id];
+    const enforceStackOrderLanes = !workstreamsWithChangedLayoutTiles.has(workstream.id);
     const rowTilesWithLanes = assignRowLanesByWeek(
       rowTiles,
       timelineColumnIndexes,
       config.planOptionId,
       durationWeeks,
+      enforceStackOrderLanes,
     );
     const laneCount = Math.max(
       1,
-      rowTilesWithLanes.reduce((maxLane, tile) => Math.max(maxLane, tile.lane + 1), 0),
+      rowTilesWithLanes.reduce(
+        (maxLane, tile) => Math.max(maxLane, tile.lane + normalizedRowSpan(tile.rowSpan)),
+        0,
+      ),
     );
+    const techFirstRowExtraHeightPx =
+      workstream.id === "tech"
+        ? Math.round(TILE_HEIGHT_PX * (TECH_FIRST_ROW_HEIGHT_MULTIPLIER - 1))
+        : 0;
+    const coreTileHeightPx = (tile: TileWithLane): number => {
+      const baseHeight = laneHeightPx(TILE_HEIGHT_PX, tile.rowSpan);
+      if (workstream.id !== "tech" || tile.lane !== 0) return baseHeight;
+      return Math.round(baseHeight * TECH_FIRST_ROW_HEIGHT_MULTIPLIER);
+    };
+    const coreTileLabelClamp = (tile: TileWithLane): 2 | 3 | 4 => {
+      if (workstream.id === "tech" && tile.lane === 0) return 4;
+      return normalizedRowSpan(tile.rowSpan) >= 2 ? 4 : 2;
+    };
     const contentRowHeight =
-      TILE_TOP_OFFSET * 2 + laneCount * TILE_HEIGHT_PX + (laneCount - 1) * TILE_LANE_GAP;
+      TILE_TOP_OFFSET * 2 +
+      laneCount * TILE_HEIGHT_PX +
+      (laneCount - 1) * TILE_LANE_GAP +
+      (laneCount > 1 ? techFirstRowExtraHeightPx : 0);
     /** Single-lane rows used to inherit a tall `scaleYpx(92)` floor; keep multi-lane padding for overlaps. */
     const rowMinFloor = laneCount <= 1 ? scaleYpx(52) : scaleYpx(92);
     const rowHeight = Math.max(rowMinFloor, contentRowHeight);
@@ -2643,10 +2745,13 @@ export function CanvasBoard({
               const tu = getTileTimelineUnits(config.planOptionId, tile, durationWeeks);
               const spanUnits = tu.endUnit - tu.startUnit + 1;
               const frameStyle: CSSProperties = {
-                top: TILE_TOP_OFFSET + tile.lane * (TILE_HEIGHT_PX + TILE_LANE_GAP),
+                top:
+                  TILE_TOP_OFFSET +
+                  tile.lane * (TILE_HEIGHT_PX + TILE_LANE_GAP) +
+                  (workstream.id === "tech" && tile.lane > 0 ? techFirstRowExtraHeightPx : 0),
                 left: `${((tu.startUnit - 1) / timelineColumns) * 100}%`,
                 width: `${(spanUnits / timelineColumns) * 100}%`,
-                height: TILE_HEIGHT_PX,
+                height: coreTileHeightPx(tile),
               };
               const innerStyle: CSSProperties = {
                 left: 0,
@@ -2664,6 +2769,7 @@ export function CanvasBoard({
                   style={frameStyle}
                   tileCategoryColors={swimlaneCategoryColors}
                   milestoneAccent={brazeCoreSwimlaneMilestoneAccent}
+                  lineClamp={coreTileLabelClamp(tile)}
                 />
               ) : (
                 <div key={uid} className="absolute" style={frameStyle}>
@@ -2674,6 +2780,7 @@ export function CanvasBoard({
                     style={innerStyle}
                     tileCategoryColors={swimlaneCategoryColors}
                     milestoneAccent={brazeCoreSwimlaneMilestoneAccent}
+                    lineClamp={coreTileLabelClamp(tile)}
                   />
                   {allowLayoutAndDrawerEdits &&
                     !customerPasswordView &&
@@ -2702,7 +2809,7 @@ export function CanvasBoard({
                         });
                       }}
                       heightClass="h-10"
-                      handleHeightPx={TILE_HEIGHT_PX}
+                      handleHeightPx={coreTileHeightPx(tile)}
                     />
                   )}
                 </div>
@@ -2740,11 +2847,13 @@ export function CanvasBoard({
 
   const adsLaneRows = ADS_CANVAS_LANE_IDS.map((laneId) => {
     const rowTiles = adsTilesByLane[laneId];
+    const enforceStackOrderLanes = !workstreamsWithChangedLayoutTiles.has(laneId);
     const rowTilesWithLanes = assignRowLanesByWeek(
       rowTiles,
       timelineColumnIndexes,
       config.planOptionId,
       durationWeeks,
+      enforceStackOrderLanes,
     );
 
     const laneMilestones = visibleTileState.filter(
@@ -2767,6 +2876,7 @@ export function CanvasBoard({
       timelineColumnIndexes,
       config.planOptionId,
       durationWeeks,
+      enforceStackOrderLanes,
     );
 
     let milestoneBandHeight = 0;
@@ -2775,7 +2885,7 @@ export function CanvasBoard({
     );
     if (laneMilestoneLanes.length > 0) {
       const laneMsLaneCount = laneMilestoneLanes.reduce(
-        (maxLane, tile) => Math.max(maxLane, tile.lane + 1),
+        (maxLane, tile) => Math.max(maxLane, tile.lane + normalizedRowSpan(tile.rowSpan)),
         0,
       );
       const goliveCount = laneMilestoneLanes.filter(isAdsGoliveMilestone).length;
@@ -2792,7 +2902,10 @@ export function CanvasBoard({
 
     const laneCount = Math.max(
       1,
-      rowTilesWithLanes.reduce((maxLane, tile) => Math.max(maxLane, tile.lane + 1), 0),
+      rowTilesWithLanes.reduce(
+        (maxLane, tile) => Math.max(maxLane, tile.lane + normalizedRowSpan(tile.rowSpan)),
+        0,
+      ),
     );
     let chevronAreaHeight = Math.max(
       ADS_CHEVRON_TOP_OFFSET_PX * 2 +
@@ -2926,7 +3039,7 @@ export function CanvasBoard({
                   const chevronUid = tileStableKey(tile);
                   const chevronFrameStyle: CSSProperties = {
                     ...style,
-                    height: ADS_CHEVRON_TILE_HEIGHT_PX,
+                    height: laneHeightPx(ADS_CHEVRON_TILE_HEIGHT_PX, tile.rowSpan),
                   };
                   return renderReadOnly ? (
                     <StaticAdsChevronTile
@@ -2974,7 +3087,7 @@ export function CanvasBoard({
                             });
                           }}
                           heightClass="h-10"
-                          handleHeightPx={ADS_CHEVRON_TILE_HEIGHT_PX}
+                          handleHeightPx={laneHeightPx(ADS_CHEVRON_TILE_HEIGHT_PX, tile.rowSpan)}
                           mode="aiAdsChevron"
                         />
                       ) : null}
@@ -3075,6 +3188,64 @@ export function CanvasBoard({
     setShowConfigColorEditor(true);
   }, [allowConfigColorEditing, resetConfigColorDrafts]);
 
+  const persistToolbarLogoHeight = useCallback(
+    async (heightPx: number) => {
+      if (!allowConfigColorEditing || !config.Config_ID) return;
+      const normalizedHeight = clampConfigLogoHeightPx(heightPx);
+      try {
+        const response = await fetch(`/api/configs/${encodeURIComponent(config.Config_ID)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ logoDisplayHeightPx: normalizedHeight }),
+        });
+        if (!response.ok) {
+          const payload = (await response.json()) as { error?: string };
+          setSaveError(payload.error ?? "Unable to save logo size.");
+          return;
+        }
+        setSaveError(null);
+        router.refresh();
+      } catch {
+        setSaveError("Network error while saving logo size.");
+      }
+    },
+    [allowConfigColorEditing, config.Config_ID, router],
+  );
+
+  const startToolbarLogoResize = useCallback(
+    (event: ReactMouseEvent<HTMLButtonElement>) => {
+      if (!allowConfigColorEditing || !centeredToolbarHasLogo) return;
+      event.preventDefault();
+      event.stopPropagation();
+      toolbarLogoResizeOriginRef.current = {
+        startY: event.clientY,
+        startHeight: toolbarLogoHeightRef.current,
+      };
+      setToolbarLogoResizeActive(true);
+
+      const onMouseMove = (moveEvent: MouseEvent) => {
+        const origin = toolbarLogoResizeOriginRef.current;
+        if (!origin) return;
+        const deltaY = moveEvent.clientY - origin.startY;
+        const nextHeight = clampConfigLogoHeightPx(origin.startHeight + deltaY);
+        toolbarLogoHeightRef.current = nextHeight;
+        setToolbarLogoHeightPx(nextHeight);
+      };
+
+      const onMouseUp = () => {
+        window.removeEventListener("mousemove", onMouseMove);
+        window.removeEventListener("mouseup", onMouseUp);
+        toolbarLogoResizeOriginRef.current = null;
+        setToolbarLogoResizeActive(false);
+        void persistToolbarLogoHeight(toolbarLogoHeightRef.current);
+      };
+
+      window.addEventListener("mousemove", onMouseMove);
+      window.addEventListener("mouseup", onMouseUp);
+    },
+    [allowConfigColorEditing, centeredToolbarHasLogo, persistToolbarLogoHeight],
+  );
+
   const saveConfigColors = useCallback(async () => {
     if (!allowConfigColorEditing || !config.Config_ID) return;
     setConfigColorEditorError(null);
@@ -3098,6 +3269,7 @@ export function CanvasBoard({
 
     const patchBody: Record<string, string> = {
       chosenTitle: chosenTitle === defaultTopToolbarTitle ? "" : chosenTitle,
+      logoDataUrl: draftLogoDataUrl.trim(),
       onboardingSessionTileColor: parseHexColorOptional(ob) ?? "",
       customerActivityTileColor: parseHexColorOptional(cb) ?? "",
       buttonColor: parseHexColorOptional(btn) ?? "",
@@ -3145,6 +3317,7 @@ export function CanvasBoard({
     draftButtonColor,
     draftChosenTitle,
     draftCustomerActivityTileColor,
+    draftLogoDataUrl,
     draftOnboardingSessionTileColor,
     draftWorkstreamGradientBottomColor,
     draftWorkstreamGradientTopColor,
@@ -3157,7 +3330,13 @@ export function CanvasBoard({
       {(showSaveToolbar || showBrazeViewToggle || isAiDecisioningStudio) && (
         <div id={canvasToolbarScopeId} className="mb-3 w-full">
           <style dangerouslySetInnerHTML={{ __html: canvasToolbarCss }} />
-          <div className="relative flex min-h-[2rem] w-full items-center justify-between gap-2">
+          <div
+            className={clsx(
+              "relative flex w-full justify-between gap-2",
+              centeredToolbarHasLogo ? "items-end" : "items-center",
+            )}
+            style={{ minHeight: `${toolbarRowMinHeightPx}px` }}
+          >
             <div className="relative z-10 flex min-w-0 flex-wrap items-center gap-2">
               {topToolbarBackHref ? (
                 <Link
@@ -3224,17 +3403,88 @@ export function CanvasBoard({
               ) : null}
             </div>
             {effectiveTopToolbarTitle ? (
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6 sm:px-12">
-                <h1
+              <div
+                className={clsx(
+                  "pointer-events-none absolute inset-0 flex justify-center px-6 sm:px-12",
+                  centeredToolbarHasLogo ? "items-end" : "items-center",
+                )}
+              >
+                <div
                   className={clsx(
-                    "max-w-[min(90vw,48rem)] truncate text-center text-[20px] font-semibold leading-tight text-[#2b1650] sm:text-[26px]",
-                    allowConfigColorEditing && "pointer-events-auto cursor-pointer rounded-sm px-2 hover:bg-[#f6efff]/70",
+                    "flex max-w-[min(94vw,60rem)] justify-center gap-0.5",
+                    "items-center",
                   )}
-                  onDoubleClick={allowConfigColorEditing ? openConfigColorEditor : undefined}
-                  title={allowConfigColorEditing ? "Double-click to edit title and colors" : undefined}
                 >
-                  {effectiveTopToolbarTitle}
-                </h1>
+                  {centeredToolbarHasLogo ? (
+                    <div
+                      className={clsx(
+                        "relative inline-block shrink-0",
+                        allowConfigColorEditing && "group pointer-events-auto",
+                      )}
+                    >
+                      <img
+                        src={topToolbarLogoDataUrl}
+                        alt={`${effectiveTopToolbarTitle} logo`}
+                        style={{ height: `${toolbarLogoHeightPx}px` }}
+                        className={clsx(
+                          "w-auto max-w-[260px] object-contain",
+                          allowConfigColorEditing &&
+                            "cursor-pointer rounded-sm p-1 hover:bg-[#f6efff]/70",
+                        )}
+                        onDoubleClick={allowConfigColorEditing ? openConfigColorEditor : undefined}
+                        title={allowConfigColorEditing ? "Double-click to edit title and colors" : undefined}
+                      />
+                      {allowConfigColorEditing ? (
+                        <>
+                          <div
+                            className={clsx(
+                              "pointer-events-none absolute inset-0 rounded-sm border border-dashed border-[#8b30e7] transition-opacity",
+                              toolbarLogoResizeActive ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                            )}
+                          />
+                          <div
+                            className={clsx(
+                              "pointer-events-none absolute -left-1 -top-1 h-2 w-2 rounded-sm border border-[#8b30e7] bg-white transition-opacity",
+                              toolbarLogoResizeActive ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                            )}
+                          />
+                          <div
+                            className={clsx(
+                              "pointer-events-none absolute -right-1 -top-1 h-2 w-2 rounded-sm border border-[#8b30e7] bg-white transition-opacity",
+                              toolbarLogoResizeActive ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                            )}
+                          />
+                          <div
+                            className={clsx(
+                              "pointer-events-none absolute -left-1 -bottom-1 h-2 w-2 rounded-sm border border-[#8b30e7] bg-white transition-opacity",
+                              toolbarLogoResizeActive ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                            )}
+                          />
+                          <button
+                            type="button"
+                            onMouseDown={startToolbarLogoResize}
+                            title="Drag to resize logo"
+                            className={clsx(
+                              "absolute -right-1 -bottom-1 h-3 w-3 rounded-sm border border-[#8b30e7] bg-white transition-opacity",
+                              toolbarLogoResizeActive ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                              "cursor-se-resize",
+                            )}
+                          />
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  <h1
+                    className={clsx(
+                      "max-w-[min(90vw,48rem)] truncate text-center text-[20px] font-semibold leading-tight text-[#2b1650] sm:text-[26px]",
+                      allowConfigColorEditing && "pointer-events-auto cursor-pointer rounded-sm px-2 hover:bg-[#f6efff]/70",
+                    )}
+                    onDoubleClick={allowConfigColorEditing ? openConfigColorEditor : undefined}
+                    title={allowConfigColorEditing ? "Double-click to edit title and colors" : undefined}
+                  >
+                    {effectiveTopToolbarTitle}
+                  </h1>
+                </div>
               </div>
             ) : null}
             <div className="relative z-10 flex shrink-0 items-center justify-end">
@@ -3425,7 +3675,10 @@ export function CanvasBoard({
               onAfterAnnotationTitleCommit={timelineAnnotationTitleCommitFlush}
             >
             <>
-              <div className="grid grid-cols-[165px_1fr] border-b border-[#E8E5F8]">
+              <div
+                className="grid border-b border-[#E8E5F8]"
+                style={{ gridTemplateColumns: `${BRAZE_CORE_SWIMLANE_RAIL_COL_PX}px 1fr` }}
+              >
                 <div className="border-r border-[#E8E5F8] px-2 py-[8px] text-[15px] font-semibold text-[#300266]">
                   Phases
                 </div>
@@ -3451,7 +3704,10 @@ export function CanvasBoard({
                 </div>
               </div>
               {showMonthsRow && (
-                <div className="grid grid-cols-[165px_1fr] border-b border-[#E8E5F8]">
+                <div
+                  className="grid border-b border-[#E8E5F8]"
+                  style={{ gridTemplateColumns: `${BRAZE_CORE_SWIMLANE_RAIL_COL_PX}px 1fr` }}
+                >
                   <div className="border-r border-[#E8E5F8] px-2 py-[8px] text-[15px] font-semibold text-[#300266]">
                     Months
                   </div>
@@ -3472,7 +3728,10 @@ export function CanvasBoard({
                 </div>
               )}
               {showWeeksRow && (
-                <div className="grid grid-cols-[165px_1fr] border-b border-[#E8E5F8]">
+                <div
+                  className="grid border-b border-[#E8E5F8]"
+                  style={{ gridTemplateColumns: `${BRAZE_CORE_SWIMLANE_RAIL_COL_PX}px 1fr` }}
+                >
                   <div className="border-r border-[#E8E5F8] px-2 py-[8px] text-[15px] font-semibold text-[#300266]">
                     Weeks
                   </div>
@@ -3751,18 +4010,34 @@ export function CanvasBoard({
                   />
                 </label>
               </div>
+              <div className="mt-2">
+                <ConfigLogoUploader
+                  logoDataUrl={draftLogoDataUrl}
+                  logoFileName={draftLogoFileName}
+                  disabled={savingConfigColors}
+                  onChangeLogo={(nextDataUrl, nextFileName) => {
+                    setDraftLogoDataUrl(nextDataUrl);
+                    setDraftLogoFileName(nextFileName);
+                  }}
+                  onRemoveLogo={() => {
+                    setDraftLogoDataUrl("");
+                    setDraftLogoFileName("");
+                  }}
+                  onError={setConfigColorEditorError}
+                />
+              </div>
               <div className="mt-4">
-              <ConfigTileCategoryColorPickers
-                variant="page"
-                disabled={savingConfigColors}
-                onboardingSessionTileColor={draftOnboardingSessionTileColor}
-                customerActivityTileColor={draftCustomerActivityTileColor}
-                buttonColor={draftButtonColor}
-                customerActivityColorLabel={`${chartProspectLegendName} Activity`}
-                onChangeOnboarding={setDraftOnboardingSessionTileColor}
-                onChangeCustomer={setDraftCustomerActivityTileColor}
-                onChangeButton={setDraftButtonColor}
-              />
+                <ConfigTileCategoryColorPickers
+                  variant="page"
+                  disabled={savingConfigColors}
+                  onboardingSessionTileColor={draftOnboardingSessionTileColor}
+                  customerActivityTileColor={draftCustomerActivityTileColor}
+                  buttonColor={draftButtonColor}
+                  customerActivityColorLabel={`${chartProspectLegendName} Activity`}
+                  onChangeOnboarding={setDraftOnboardingSessionTileColor}
+                  onChangeCustomer={setDraftCustomerActivityTileColor}
+                  onChangeButton={setDraftButtonColor}
+                />
               </div>
               {!isAiDecisioningStudio ? (
                 <div className="mt-4">

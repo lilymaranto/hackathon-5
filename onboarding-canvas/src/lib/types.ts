@@ -64,6 +64,10 @@ export type ConfigRecord = {
   Title: string;
   /** Optional toolbar heading override from configs sheet `chosen_title`; when blank, UI falls back to computed plan heading. */
   chosenTitle?: string;
+  /** Optional config logo (data URL) stored in Mongo `config_assets`; used on config timeline pages. */
+  logoDataUrl?: string;
+  /** Optional rendered logo height on config toolbar (px), clamped to <= 60. */
+  logoDisplayHeightPx?: number;
   Product_Type: ProductType;
   Duration_Weeks: PlanDurationWeeks;
   /** Caboodle **Plan_Option** (slug); drives timeline label and week scaling. */
@@ -111,6 +115,8 @@ export type TileRecord = {
   Span_Weeks: number;
   /** Per-week vertical ordering from templates/caboodle (lower renders higher). */
   Stack_Order: number;
+  /** Vertical lane height on swimlane views (1 = normal tile height, 2 = spans two lane rows). */
+  Row_Span: number;
   Category: TileCategory;
   /** Tiles sheet **Notes** column (free text). */
   Notes?: string;

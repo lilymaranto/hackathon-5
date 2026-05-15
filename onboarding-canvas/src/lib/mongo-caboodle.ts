@@ -109,6 +109,77 @@ function parseCompositeTileRowId(rowId: string): { configId: string; slug: strin
   return { configId: rowId.slice(0, i), slug: rowId.slice(i + sep.length) };
 }
 
+const LOGO_ASSET_TYPE = "logo";
+const MAX_LOGO_BYTES = 1_500_000; // ~1.5MB
+const MIN_LOGO_DISPLAY_HEIGHT_PX = 20;
+const MAX_LOGO_DISPLAY_HEIGHT_PX = 60;
+const ALLOWED_LOGO_MIME_TYPES = new Set([
+  "image/png",
+  "image/webp",
+  "image/svg+xml",
+  "image/avif",
+]);
+
+function normalizeLogoDataUrl(value: unknown): string | undefined {
+  const raw = String(value ?? "").trim();
+  if (!raw) return undefined;
+  const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/.exec(raw);
+  if (!match) {
+    throw new Error("Invalid logo format. Please upload a PNG, SVG, WebP, or AVIF image.");
+  }
+  const mimeType = match[1]!.toLowerCase();
+  if (!ALLOWED_LOGO_MIME_TYPES.has(mimeType)) {
+    throw new Error("Unsupported logo type. Use PNG, SVG, WebP, or AVIF.");
+  }
+  const base64 = match[2]!;
+  const bytes = Buffer.byteLength(base64, "base64");
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    throw new Error("Invalid logo data.");
+  }
+  if (bytes > MAX_LOGO_BYTES) {
+    throw new Error("Logo file is too large (max 1.5MB).");
+  }
+  return `data:${mimeType};base64,${base64}`;
+}
+
+function normalizeLogoDisplayHeightPx(value: unknown): number | undefined {
+  if (value === undefined || value === null || String(value).trim() === "") return undefined;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return undefined;
+  return Math.max(MIN_LOGO_DISPLAY_HEIGHT_PX, Math.min(MAX_LOGO_DISPLAY_HEIGHT_PX, Math.round(parsed)));
+}
+
+async function fetchConfigLogoDataUrl(configId: string): Promise<string | undefined> {
+  const { assets } = await getMongoCollections();
+  const doc = await assets.findOne(
+    { Config_ID: configId, Asset_Type: LOGO_ASSET_TYPE },
+    { projection: { Data_URL: 1 } },
+  );
+  const dataUrl = String((doc as Record<string, unknown> | null)?.Data_URL ?? "").trim();
+  return dataUrl || undefined;
+}
+
+async function upsertConfigLogoDataUrl(configId: string, logoDataUrl: string | undefined): Promise<void> {
+  const { assets } = await getMongoCollections();
+  if (!logoDataUrl) {
+    await assets.deleteOne({ Config_ID: configId, Asset_Type: LOGO_ASSET_TYPE });
+    return;
+  }
+  await assets.updateOne(
+    { Config_ID: configId, Asset_Type: LOGO_ASSET_TYPE },
+    {
+      $set: {
+        Config_ID: configId,
+        Asset_Type: LOGO_ASSET_TYPE,
+        Data_URL: logoDataUrl,
+        Updated_At: new Date().toISOString(),
+      },
+      $setOnInsert: { Created_At: new Date().toISOString() },
+    },
+    { upsert: true },
+  );
+}
+
 const TILE_WORKSTREAM_IDS = new Set<string>([
   "governance",
   "data",
@@ -223,11 +294,17 @@ function normalizeConfig(record: Record<string, unknown>): ConfigRecord {
       record["Chosen Title"] ??
       "",
   ).trim();
+  const logoDisplayHeightPx = normalizeLogoDisplayHeightPx(
+    record.logo_display_height_px ??
+      record.Logo_Display_Height_Px ??
+      record.logoDisplayHeightPx,
+  );
 
   return {
     Config_ID: configId,
     Title: String(record.Title ?? ""),
     ...(chosenTitle ? { chosenTitle } : {}),
+    ...(logoDisplayHeightPx ? { logoDisplayHeightPx } : {}),
     Product_Type: productType,
     Duration_Weeks: durationWeeks,
     planOptionId,
@@ -266,6 +343,10 @@ function normalizeTile(record: Record<string, unknown>): TileRecord {
     Start_Week: Math.max(1, Math.round(toNumber(record.Start_Week, 1))),
     Span_Weeks: Math.max(1, Math.round(toNumber(record.Span_Weeks, 1))),
     Stack_Order: Math.max(1, Math.round(toNumber(record.Stack_Order, 1))),
+    Row_Span: Math.max(
+      1,
+      Math.round(toNumber(record.Row_Span ?? record.row_span ?? record.RowSpan, 1)),
+    ),
     Category: String(record.Category ?? "customer_activity") as TileRecord["Category"],
     Notes: String(record.Notes ?? ""),
     Description: String(record.Description ?? ""),
@@ -300,13 +381,19 @@ export async function fetchConfigs(search?: string): Promise<ConfigRecord[]> {
 export async function fetchConfigByPassword(password: string): Promise<ConfigRecord | null> {
   const { configs } = await getMongoCollections();
   const doc = await configs.findOne({ Password: password });
-  return doc ? normalizeConfig(doc as unknown as Record<string, unknown>) : null;
+  if (!doc) return null;
+  const normalized = normalizeConfig(doc as unknown as Record<string, unknown>);
+  const logoDataUrl = await fetchConfigLogoDataUrl(normalized.Config_ID);
+  return logoDataUrl ? { ...normalized, logoDataUrl } : normalized;
 }
 
 export async function fetchConfigById(configId: string): Promise<ConfigRecord | null> {
   const { configs } = await getMongoCollections();
   const doc = await configs.findOne({ Config_ID: configId });
-  return doc ? normalizeConfig(doc as unknown as Record<string, unknown>) : null;
+  if (!doc) return null;
+  const normalized = normalizeConfig(doc as unknown as Record<string, unknown>);
+  const logoDataUrl = await fetchConfigLogoDataUrl(normalized.Config_ID);
+  return logoDataUrl ? { ...normalized, logoDataUrl } : normalized;
 }
 
 export async function fetchTiles(configId: string): Promise<TileRecord[]> {
@@ -331,6 +418,7 @@ export async function createConfigWithSeed(input: {
   buttonColor?: string;
   workstreamGradientTopColor?: string;
   workstreamGradientBottomColor?: string;
+  logoDataUrl?: string;
 }): Promise<ConfigRecord> {
   const { configs, tiles } = await getMongoCollections();
   const configId = `${input.title.toLowerCase().replace(/\s+/g, "-")}-${Math.random().toString(36).slice(2, 6)}`;
@@ -346,6 +434,7 @@ export async function createConfigWithSeed(input: {
   const buttonHex = parseHexColorOptional(input.buttonColor);
   const wsTopHex = parseHexColorOptional(input.workstreamGradientTopColor);
   const wsBottomHex = parseHexColorOptional(input.workstreamGradientBottomColor);
+  const logoDataUrl = normalizeLogoDataUrl(input.logoDataUrl);
   const isBrazeCore = input.productType !== "AI Decisioning Studio";
   const defaultOrderRail = railColorResolverForWorkstreamOrder(
     [...BRAZE_CORE_WORKSTREAM_IDS],
@@ -375,6 +464,7 @@ export async function createConfigWithSeed(input: {
     Button_Color: buttonHex ?? "",
     TimelineAnnotation: serializeTimelineAnnotationDocument(EMPTY_TIMELINE_ANNOTATION_DOC),
     chosen_title: "",
+    logo_display_height_px: MAX_LOGO_DISPLAY_HEIGHT_PX,
     Channel_Email: Boolean(ch.email),
     Channel_SMS: Boolean(ch.sms),
     Channel_WhatsApp: Boolean(ch.whatsapp),
@@ -402,6 +492,7 @@ export async function createConfigWithSeed(input: {
       Start_Week: tile.Start_Week,
       Span_Weeks: tile.Span_Weeks,
       Stack_Order: tile.Stack_Order,
+      Row_Span: Math.max(1, Math.round(Number(tile.Row_Span) || 1)),
       Category: tile.Category,
       Notes: "",
       Description: "",
@@ -415,6 +506,7 @@ export async function createConfigWithSeed(input: {
   if (seedTiles.length > 0) {
     await tiles.insertMany(seedTiles);
   }
+  await upsertConfigLogoDataUrl(configId, logoDataUrl);
 
   const created = await fetchConfigById(configId);
   if (!created) {
@@ -449,6 +541,7 @@ export async function duplicateConfig(sourceConfigId: string, createdBy: string)
   const buttonHex = parseHexColorOptional(source.buttonColor ?? "");
   const wsTopHex = parseHexColorOptional(source.workstreamGradientTopColor ?? "");
   const wsBottomHex = parseHexColorOptional(source.workstreamGradientBottomColor ?? "");
+  const sourceLogoDataUrl = normalizeLogoDataUrl(source.logoDataUrl);
   const isBrazeCore = source.Product_Type !== "AI Decisioning Studio";
   const dupOrderRail = railColorResolverForWorkstreamOrder(
     source.brazeCoreWorkstreamOrder?.length
@@ -486,6 +579,8 @@ export async function duplicateConfig(sourceConfigId: string, createdBy: string)
       source.timelineAnnotation ?? EMPTY_TIMELINE_ANNOTATION_DOC,
     ),
     chosen_title: "",
+    logo_display_height_px:
+      normalizeLogoDisplayHeightPx(source.logoDisplayHeightPx) ?? MAX_LOGO_DISPLAY_HEIGHT_PX,
     Channel_Email: Boolean(ch.email),
     Channel_SMS: Boolean(ch.sms),
     Channel_WhatsApp: Boolean(ch.whatsapp),
@@ -501,6 +596,7 @@ export async function duplicateConfig(sourceConfigId: string, createdBy: string)
     Start_Week: t.Start_Week,
     Span_Weeks: t.Span_Weeks,
     Stack_Order: t.Stack_Order,
+    Row_Span: Math.max(1, Math.round(Number(t.Row_Span) || 1)),
     Category: t.Category,
     Notes: t.Notes ?? "",
     Description: t.Description ?? "",
@@ -512,6 +608,7 @@ export async function duplicateConfig(sourceConfigId: string, createdBy: string)
   if (duplicateTiles.length > 0) {
     await tiles.insertMany(duplicateTiles);
   }
+  await upsertConfigLogoDataUrl(configId, sourceLogoDataUrl);
 
   const created = await fetchConfigById(configId);
   if (!created) {
@@ -574,6 +671,7 @@ export async function createTileRow(
     | "Start_Week"
     | "Span_Weeks"
     | "Stack_Order"
+    | "Row_Span"
     | "Category"
     | "Notes"
     | "Description"
@@ -592,6 +690,7 @@ export async function createTileRow(
     Start_Week: tile.Start_Week,
     Span_Weeks: tile.Span_Weeks,
     Stack_Order: tile.Stack_Order,
+    Row_Span: Math.max(1, Math.round(Number(tile.Row_Span) || 1)),
     Category: tile.Category,
     Notes: tile.Notes ?? "",
     Description: tile.Description ?? "",
@@ -630,6 +729,7 @@ export async function replaceTilesForConfigSeed(input: {
       Start_Week: tile.Start_Week,
       Span_Weeks: tile.Span_Weeks,
       Stack_Order: tile.Stack_Order,
+      Row_Span: Math.max(1, Math.round(Number(tile.Row_Span) || 1)),
       Category: tile.Category,
       Notes: "",
       Description: "",
@@ -665,6 +765,8 @@ export async function patchConfig(
       | "buttonColor"
       | "workstreamGradientTopColor"
       | "workstreamGradientBottomColor"
+      | "logoDataUrl"
+      | "logoDisplayHeightPx"
       | "brazeCoreWorkstreamOrder"
       | "timelineAnnotation"
     >
@@ -709,6 +811,10 @@ export async function patchConfig(
   if (updates.timelineAnnotation !== undefined) {
     set.TimelineAnnotation = serializeTimelineAnnotationDocument(updates.timelineAnnotation);
   }
+  if (updates.logoDisplayHeightPx !== undefined) {
+    set.logo_display_height_px =
+      normalizeLogoDisplayHeightPx(updates.logoDisplayHeightPx) ?? MAX_LOGO_DISPLAY_HEIGHT_PX;
+  }
   if (updates.Product_Type === "AI Decisioning Studio") {
     set.Plan = "ai_decisioning_studio";
     set.Duration_Weeks = AI_DECISIONING_STUDIO_TIMELINE_WEEKS;
@@ -722,6 +828,10 @@ export async function patchConfig(
   );
   if (result.matchedCount === 0) {
     throw new Error(`Config not found: ${configId}`);
+  }
+  if (updates.logoDataUrl !== undefined) {
+    const logoDataUrl = normalizeLogoDataUrl(updates.logoDataUrl);
+    await upsertConfigLogoDataUrl(configId, logoDataUrl);
   }
 }
 
@@ -743,8 +853,9 @@ export async function fetchTileDeleteKeysForConfig(configId: string): Promise<st
 }
 
 export async function deleteConfigOnly(configId: string): Promise<void> {
-  const { configs } = await getMongoCollections();
+  const { configs, assets } = await getMongoCollections();
   await configs.deleteOne({ Config_ID: configId });
+  await assets.deleteOne({ Config_ID: configId, Asset_Type: LOGO_ASSET_TYPE });
 }
 
 export async function deleteTilesByKeys(configId: string, tileRowKeys: string[]): Promise<number> {

@@ -60,6 +60,7 @@ export async function POST(request: NextRequest) {
       buttonColor?: string;
       workstreamGradientTopColor?: string;
       workstreamGradientBottomColor?: string;
+      logoDataUrl?: string;
       channels?: {
         email?: boolean;
         sms?: boolean;
@@ -150,6 +151,7 @@ export async function POST(request: NextRequest) {
       ...(buttonHex ? { buttonColor: buttonHex } : {}),
       ...(wsTopHex ? { workstreamGradientTopColor: wsTopHex } : {}),
       ...(wsBottomHex ? { workstreamGradientBottomColor: wsBottomHex } : {}),
+      ...(body.logoDataUrl !== undefined ? { logoDataUrl: body.logoDataUrl } : {}),
     });
 
     return NextResponse.json({ data: created });
