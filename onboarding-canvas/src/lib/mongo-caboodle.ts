@@ -15,6 +15,7 @@ import {
   parseBrazeCoreWorkstreamOrderJson,
   railColorResolverForWorkstreamOrder,
 } from "@/lib/braze-workstream-order";
+import { parseTimelineDatesField, serializeTimelineDates } from "@/lib/timeline-dates";
 import {
   ConfigRecord,
   IndustryType,
@@ -287,6 +288,9 @@ function normalizeConfig(record: Record<string, unknown>): ConfigRecord {
       record.timeline_annotation ??
       record.Timeline_Annotation,
   );
+  const timelineDates = parseTimelineDatesField(
+    record.Timeline_Dates ?? record.timeline_dates ?? record.timelineDates,
+  );
   const chosenTitle = String(
     record.chosen_title ??
       record.Chosen_Title ??
@@ -320,6 +324,7 @@ function normalizeConfig(record: Record<string, unknown>): ConfigRecord {
     ...(workstreamGradientBottomColor ? { workstreamGradientBottomColor } : {}),
     ...(brazeCoreWorkstreamOrder?.length ? { brazeCoreWorkstreamOrder } : {}),
     timelineAnnotation,
+    ...(timelineDates?.length ? { timelineDates } : {}),
     channels: normalizeChannels(record),
   };
 }
@@ -419,6 +424,7 @@ export async function createConfigWithSeed(input: {
   workstreamGradientTopColor?: string;
   workstreamGradientBottomColor?: string;
   logoDataUrl?: string;
+  timelineDates?: string[];
 }): Promise<ConfigRecord> {
   const { configs, tiles } = await getMongoCollections();
   const configId = `${input.title.toLowerCase().replace(/\s+/g, "-")}-${Math.random().toString(36).slice(2, 6)}`;
@@ -469,6 +475,7 @@ export async function createConfigWithSeed(input: {
     Channel_SMS: Boolean(ch.sms),
     Channel_WhatsApp: Boolean(ch.whatsapp),
     Channel_InProduct: Boolean(ch.inProductMessaging),
+    Timeline_Dates: serializeTimelineDates(input.timelineDates ?? []),
   });
 
   const seedTiles = (
@@ -585,6 +592,7 @@ export async function duplicateConfig(sourceConfigId: string, createdBy: string)
     Channel_SMS: Boolean(ch.sms),
     Channel_WhatsApp: Boolean(ch.whatsapp),
     Channel_InProduct: Boolean(ch.inProductMessaging),
+    Timeline_Dates: serializeTimelineDates(source.timelineDates ?? []),
   });
 
   const duplicateTiles = sourceTiles.map((t) => ({
@@ -769,6 +777,7 @@ export async function patchConfig(
       | "logoDisplayHeightPx"
       | "brazeCoreWorkstreamOrder"
       | "timelineAnnotation"
+      | "timelineDates"
     >
   >,
 ): Promise<void> {
@@ -810,6 +819,9 @@ export async function patchConfig(
   }
   if (updates.timelineAnnotation !== undefined) {
     set.TimelineAnnotation = serializeTimelineAnnotationDocument(updates.timelineAnnotation);
+  }
+  if (updates.timelineDates !== undefined) {
+    set.Timeline_Dates = serializeTimelineDates(updates.timelineDates);
   }
   if (updates.logoDisplayHeightPx !== undefined) {
     set.logo_display_height_px =

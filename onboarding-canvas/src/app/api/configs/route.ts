@@ -1,7 +1,14 @@
 import { authOptions } from "@/lib/auth-options";
 import { createConfigWithSeed, fetchConfigs } from "@/lib/caboodle";
-import { parsePlanOptionId } from "@/lib/constants";
+import { durationWeeksForPlanOption, parsePlanOptionId } from "@/lib/constants";
 import { parseHexColorOptional } from "@/lib/tile-category-colors";
+import { getTimelineConfig } from "@/lib/templates";
+import {
+  buildTimelineDatesFromStart,
+  getTimelinePeriodCount,
+  isValidIsoDate,
+  usesWeeklyTimelineDates,
+} from "@/lib/timeline-dates";
 import { getServerSession } from "next-auth";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -61,6 +68,7 @@ export async function POST(request: NextRequest) {
       workstreamGradientTopColor?: string;
       workstreamGradientBottomColor?: string;
       logoDataUrl?: string;
+      timelineStartDate?: string;
       channels?: {
         email?: boolean;
         sms?: boolean;
@@ -138,6 +146,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const timelineStart = body.timelineStartDate?.trim() ?? "";
+    if (timelineStart && !isValidIsoDate(timelineStart)) {
+      return NextResponse.json(
+        { error: "Invalid timelineStartDate: use YYYY-MM-DD." },
+        { status: 400 },
+      );
+    }
+    const durationWeeks =
+      body.productType === "AI Decisioning Studio"
+        ? 16
+        : durationWeeksForPlanOption(planOptionId);
+    const timelineConfig = getTimelineConfig(planOptionId);
+    const periodCount = getTimelinePeriodCount(planOptionId, timelineConfig, durationWeeks);
+    const timelineDates =
+      timelineStart && periodCount > 0
+        ? buildTimelineDatesFromStart(
+            timelineStart,
+            periodCount,
+            usesWeeklyTimelineDates(planOptionId),
+          )
+        : undefined;
+
     const created = await createConfigWithSeed({
       title: body.title,
       productType: body.productType,
@@ -152,6 +182,7 @@ export async function POST(request: NextRequest) {
       ...(wsTopHex ? { workstreamGradientTopColor: wsTopHex } : {}),
       ...(wsBottomHex ? { workstreamGradientBottomColor: wsBottomHex } : {}),
       ...(body.logoDataUrl !== undefined ? { logoDataUrl: body.logoDataUrl } : {}),
+      ...(timelineDates?.length ? { timelineDates } : {}),
     });
 
     return NextResponse.json({ data: created });

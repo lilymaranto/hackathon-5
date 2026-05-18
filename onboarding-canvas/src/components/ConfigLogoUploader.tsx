@@ -200,9 +200,9 @@ export function ConfigLogoUploader({
 
   return (
     <div>
-      <label className="mb-[4px] block text-[12px] font-semibold text-[#2c1650]">Logo Optional.</label>
+      <label className="mb-[4px] block text-[12px] font-semibold text-[#2c1650]">Logo</label>
       <p className="mb-[7px] text-[10px] text-[#6b5798]">
-        Use a transparent background when possible (I use remove.bg when needing to take out background).
+        Optional. Use a transparent background when possible (I use remove.bg when needing to take out background).
       </p>
       <input
         ref={inputRef}

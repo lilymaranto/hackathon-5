@@ -9,6 +9,7 @@ import {
   GANTT_TASK_BAR_LANE_GAP_PX,
   scaleYpx,
 } from "@/lib/canvas-layout-y";
+import { EditableTimelinePeriodLabel } from "@/components/EditableTimelinePeriodLabel";
 import { GROWTH_SILVER_COLUMNS_PER_WEEK, WORKSTREAMS } from "@/lib/constants";
 import { getTileTimelineUnits } from "@/lib/timeline-units";
 import type { TimelineAnnotationDocument } from "@/lib/timeline-annotations";
@@ -177,6 +178,10 @@ export type BrazeCoreGanttChartProps = {
   onTimelineAnnotationChange?: (doc: TimelineAnnotationDocument) => void;
   /** After a marker title commit (Enter / blur / click-away); parent may flush PATCH immediately. */
   onAfterAnnotationTitleCommit?: () => void;
+  /** Caboodle **Timeline_Dates** — replaces month/week header labels when set. */
+  timelineDates?: string[];
+  timelinePeriodDatesEditable?: boolean;
+  onTimelineDateCommit?: (index: number, isoDate: string) => void;
 };
 
 /** Must match {@link CanvasBoard} `tileStableKey` for shared DnD ids. */
@@ -1060,6 +1065,9 @@ export function BrazeCoreGanttChart({
   timelineAnnotation,
   onTimelineAnnotationChange,
   onAfterAnnotationTitleCommit,
+  timelineDates,
+  timelinePeriodDatesEditable = false,
+  onTimelineDateCommit,
 }: BrazeCoreGanttChartProps) {
   const ganttAnnotationTrackRef = useRef<HTMLDivElement>(null);
   const ganttRailLocalRef = useRef<HTMLDivElement | null>(null);
@@ -1358,7 +1366,14 @@ export function BrazeCoreGanttChart({
                     className="border-l border-[#E8E5F8] px-2 py-3 text-center text-sm font-semibold text-[#6B5A9A]"
                     style={{ gridColumn: `span ${monthGridSpans[i]!}` }}
                   >
-                    {month.name}
+                    <EditableTimelinePeriodLabel
+                      index={i}
+                      fallbackLabel={month.name}
+                      isoDate={timelineDates?.[i]}
+                      timelineDates={timelineDates}
+                      editable={timelinePeriodDatesEditable && Boolean(onTimelineDateCommit)}
+                      onCommit={(index, isoDate) => onTimelineDateCommit?.(index, isoDate)}
+                    />
                   </div>
                 ))}
               </div>
@@ -1380,7 +1395,15 @@ export function BrazeCoreGanttChart({
                     className="border-l border-[#E8E5F8] px-2 py-2 text-center text-xs font-semibold text-[#6B5A9A] sm:px-3 sm:py-3 sm:text-sm"
                     style={{ gridColumn: `span ${GROWTH_SILVER_COLUMNS_PER_WEEK}` }}
                   >
-                    {`Week ${index + 1}`}
+                    <EditableTimelinePeriodLabel
+                      index={index}
+                      fallbackLabel={`Week ${index + 1}`}
+                      isoDate={timelineDates?.[index]}
+                      timelineDates={timelineDates}
+                      editable={timelinePeriodDatesEditable && Boolean(onTimelineDateCommit)}
+                      onCommit={(idx, isoDate) => onTimelineDateCommit?.(idx, isoDate)}
+                      className="block w-full"
+                    />
                   </div>
                 ))}
               </div>

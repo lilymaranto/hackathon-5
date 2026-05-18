@@ -6,13 +6,20 @@ import {
   patchConfig,
   replaceTilesForConfigSeed,
 } from "@/lib/caboodle";
-import { parsePlanOptionId, WORKSTREAMS } from "@/lib/constants";
+import { durationWeeksForPlanOption, parsePlanOptionId, WORKSTREAMS } from "@/lib/constants";
 import {
   normalizeBrazeCoreWorkstreamOrder,
   type BrazeWorkstreamOrderEntry,
 } from "@/lib/braze-workstream-order";
 import { parseHexColorOptional } from "@/lib/tile-category-colors";
 import { parseTimelineAnnotationField, type TimelineAnnotationDocument } from "@/lib/timeline-annotations";
+import { getTimelineConfig } from "@/lib/templates";
+import {
+  buildTimelineDatesFromStart,
+  getTimelinePeriodCount,
+  isValidIsoDate,
+  usesWeeklyTimelineDates,
+} from "@/lib/timeline-dates";
 import { IndustryType, PlanOptionId, ProductType, Workstream } from "@/lib/types";
 import { after, NextRequest, NextResponse } from "next/server";
 
@@ -63,6 +70,8 @@ export async function PATCH(
       brazeCoreWorkstreamOrder?: BrazeWorkstreamOrderEntry[] | Workstream[];
       timelineAnnotation?: TimelineAnnotationDocument | unknown;
       TimelineAnnotation?: TimelineAnnotationDocument | string | unknown;
+      timelineStartDate?: string;
+      timelineDates?: string[];
     };
 
     const hasWsOrderKey = Object.prototype.hasOwnProperty.call(body, "brazeCoreWorkstreamOrder");
@@ -130,6 +139,49 @@ export async function PATCH(
       );
     }
 
+    const hasTimelineStartKey = Object.prototype.hasOwnProperty.call(body, "timelineStartDate");
+    const hasTimelineDatesKey = Object.prototype.hasOwnProperty.call(body, "timelineDates");
+    let timelineDatesPatch: string[] | undefined;
+    if (hasTimelineDatesKey) {
+      const raw = body.timelineDates;
+      if (!Array.isArray(raw)) {
+        return NextResponse.json({ error: "timelineDates must be an array of ISO dates." }, { status: 400 });
+      }
+      for (const d of raw) {
+        const s = String(d).trim();
+        if (s && !isValidIsoDate(s)) {
+          return NextResponse.json(
+            { error: `Invalid timeline date "${s}": use YYYY-MM-DD.` },
+            { status: 400 },
+          );
+        }
+      }
+      timelineDatesPatch = raw.map((d) => String(d).trim()).filter(Boolean);
+    } else if (hasTimelineStartKey) {
+      const start = body.timelineStartDate?.trim() ?? "";
+      if (start && !isValidIsoDate(start)) {
+        return NextResponse.json(
+          { error: "Invalid timelineStartDate: use YYYY-MM-DD." },
+          { status: 400 },
+        );
+      }
+      const durationWeeks =
+        nextProductType === "AI Decisioning Studio"
+          ? 16
+          : nextPlanOptionId === existing.planOptionId && existing.Duration_Weeks
+            ? existing.Duration_Weeks
+            : durationWeeksForPlanOption(nextPlanOptionId);
+      const timelineConfig = getTimelineConfig(nextPlanOptionId);
+      const periodCount = getTimelinePeriodCount(nextPlanOptionId, timelineConfig, durationWeeks);
+      timelineDatesPatch = start
+        ? buildTimelineDatesFromStart(
+            start,
+            periodCount,
+            usesWeeklyTimelineDates(nextPlanOptionId),
+          )
+        : [];
+    }
+
     await patchConfig(configId, {
       Title: body.title,
       ...(hasChosenTitleKey ? { chosenTitle: body.chosenTitle?.trim() ?? "" } : {}),
@@ -160,6 +212,7 @@ export async function PATCH(
       ...(hasTimelineAnnotationKey && timelineAnnotationPatch
         ? { timelineAnnotation: timelineAnnotationPatch }
         : {}),
+      ...(hasTimelineDatesKey || hasTimelineStartKey ? { timelineDates: timelineDatesPatch ?? [] } : {}),
     });
 
     const shouldReseedTiles =

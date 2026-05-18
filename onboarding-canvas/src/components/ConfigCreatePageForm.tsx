@@ -1,5 +1,6 @@
 "use client";
 
+import { ConfigStartDateField } from "@/components/ConfigStartDateField";
 import { ConfigLogoUploader } from "@/components/ConfigLogoUploader";
 import { ConfigTileCategoryColorPickers } from "@/components/ConfigTileCategoryColorPickers";
 import { ConfigWorkstreamGradientColorPickers } from "@/components/ConfigWorkstreamGradientColorPickers";
@@ -32,6 +33,7 @@ export function ConfigCreatePageForm() {
   const [buttonColor, setButtonColor] = useState("");
   const [workstreamGradientTopColor, setWorkstreamGradientTopColor] = useState("");
   const [workstreamGradientBottomColor, setWorkstreamGradientBottomColor] = useState("");
+  const [timelineStartDate, setTimelineStartDate] = useState("");
   const [logoDataUrl, setLogoDataUrl] = useState("");
   const [logoFileName, setLogoFileName] = useState("");
 
@@ -109,6 +111,7 @@ export function ConfigCreatePageForm() {
             }
           : {}),
         ...(logoDataUrl.trim() ? { logoDataUrl: logoDataUrl.trim() } : {}),
+        ...(timelineStartDate.trim() ? { timelineStartDate: timelineStartDate.trim() } : {}),
       }),
     });
 
@@ -228,6 +231,14 @@ export function ConfigCreatePageForm() {
           </div>
           <span className="text-[10px] font-normal text-[#6b5798]">Optional. If blank, password defaults to prospect name lowercase with no spaces.</span>
         </label>
+      </div>
+
+      <div className="mt-4">
+        <ConfigStartDateField
+          value={timelineStartDate}
+          onChange={setTimelineStartDate}
+          disabled={isSaving}
+        />
       </div>
 
       <div className="mt-4">

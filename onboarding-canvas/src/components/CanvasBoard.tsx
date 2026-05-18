@@ -7,7 +7,9 @@ import {
 import { AddSwimlaneTilePanel } from "@/components/AddSwimlaneTilePanel";
 import { BrazeCoreResourcesChart } from "@/components/BrazeCoreResourcesChart";
 import { BrazeCoreSpanResizeHandle } from "@/components/BrazeCoreSpanResizeHandle";
+import { ConfigStartDateField } from "@/components/ConfigStartDateField";
 import { ConfigLogoUploader } from "@/components/ConfigLogoUploader";
+import { EditableTimelinePeriodLabel } from "@/components/EditableTimelinePeriodLabel";
 import { ConfigTileCategoryColorPickers } from "@/components/ConfigTileCategoryColorPickers";
 import { ConfigWorkstreamGradientColorPickers } from "@/components/ConfigWorkstreamGradientColorPickers";
 import { TileDrawer } from "@/components/TileDrawer";
@@ -69,6 +71,13 @@ import {
   toggleWorkstreamLabelTextType,
   workstreamLabelTextTypeFromRailHex,
 } from "@/lib/braze-workstream-order";
+import {
+  buildTimelineDatesFromStart,
+  getTimelinePeriodCount,
+  patchTimelineDateAtIndex,
+  timelineStartDateFromDates,
+  usesWeeklyTimelineDates,
+} from "@/lib/timeline-dates";
 import { ConfigRecord, PlanOptionId, TileCategory, TileRecord, Workstream, type BrazeWorkstreamOrderEntry } from "@/lib/types";
 import {
   closestCorners,
@@ -1248,6 +1257,12 @@ export function CanvasBoard({
   const [draftWorkstreamGradientBottomColor, setDraftWorkstreamGradientBottomColor] = useState(
     config.workstreamGradientBottomColor ?? "",
   );
+  const [draftTimelineStartDate, setDraftTimelineStartDate] = useState(
+    timelineStartDateFromDates(config.timelineDates),
+  );
+  const [timelineDatesLocal, setTimelineDatesLocal] = useState<string[]>(
+    () => config.timelineDates ?? [],
+  );
   const [draftLogoDataUrl, setDraftLogoDataUrl] = useState(config.logoDataUrl ?? "");
   const [draftLogoFileName, setDraftLogoFileName] = useState("");
   const [toolbarLogoHeightPx, setToolbarLogoHeightPx] = useState(
@@ -1259,7 +1274,9 @@ export function CanvasBoard({
   const timelineRef = useRef<HTMLDivElement | null>(null);
   const brazeSwimlaneTimelineTrackRef = useRef<HTMLDivElement | null>(null);
   const annSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timelineDatesSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const timelineAnnDocRef = useRef<TimelineAnnotationDocument>(EMPTY_TIMELINE_ANNOTATION_DOC);
+  const timelineDatesRef = useRef<string[]>(config.timelineDates ?? []);
   /** Measured rail width for drag math only — must NOT drive React state (ResizeObserver + heavy ADS tiles froze the tab). */
   const timelineWidthRef = useRef(1200);
   const isAiDecisioningStudio = config.Product_Type === "AI Decisioning Studio";
@@ -1414,6 +1431,7 @@ export function CanvasBoard({
 
   const resetConfigColorDrafts = useCallback(() => {
     setDraftChosenTitle(config.chosenTitle?.trim() || defaultTopToolbarTitle);
+    setDraftTimelineStartDate(timelineStartDateFromDates(config.timelineDates));
     setDraftLogoDataUrl(config.logoDataUrl ?? "");
     setDraftLogoFileName("");
     setDraftOnboardingSessionTileColor(config.onboardingSessionTileColor ?? "");
@@ -1430,10 +1448,75 @@ export function CanvasBoard({
     config.buttonColor,
     config.workstreamGradientTopColor,
     config.workstreamGradientBottomColor,
+    config.timelineDates,
   ]);
 
   const timelineAnnotationsEditable =
     allowLayoutAndDrawerEdits && !renderReadOnly && !customerPasswordView;
+  const timelinePeriodDatesEditable =
+    timelineAnnotationsEditable && (showMonthsRow || showWeeksRow);
+
+  const flushTimelineDatesToServer = useCallback(
+    async (dates: string[]) => {
+      if (!config.Config_ID || customerPasswordView) return;
+      try {
+        const res = await fetch(`/api/configs/${encodeURIComponent(config.Config_ID)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ timelineDates: dates }),
+        });
+        if (!res.ok) {
+          const j = (await res.json()) as { error?: string };
+          setSaveError(j.error ?? "Unable to save timeline dates.");
+        }
+      } catch {
+        setSaveError("Unable to save timeline dates.");
+      }
+    },
+    [config.Config_ID, customerPasswordView],
+  );
+
+  const scheduleTimelineDatesSave = useCallback(
+    (dates: string[]) => {
+      if (!config.Config_ID || customerPasswordView) return;
+      if (timelineDatesSaveTimerRef.current) clearTimeout(timelineDatesSaveTimerRef.current);
+      timelineDatesSaveTimerRef.current = setTimeout(() => {
+        timelineDatesSaveTimerRef.current = null;
+        void flushTimelineDatesToServer(dates);
+      }, 480);
+    },
+    [config.Config_ID, customerPasswordView, flushTimelineDatesToServer],
+  );
+
+  const handleTimelineDateCommit = useCallback(
+    (index: number, isoDate: string) => {
+      const periodCount = getTimelinePeriodCount(config.planOptionId, timelineConfig, durationWeeks);
+      const weekly = usesWeeklyTimelineDates(config.planOptionId);
+      const next =
+        index === 0
+          ? buildTimelineDatesFromStart(isoDate, periodCount, weekly)
+          : patchTimelineDateAtIndex(
+              (() => {
+                const base = [...timelineDatesRef.current];
+                while (base.length < periodCount) base.push("");
+                return base;
+              })(),
+              index,
+              isoDate,
+            );
+      timelineDatesRef.current = next;
+      setTimelineDatesLocal(next);
+      if (index === 0) setDraftTimelineStartDate(isoDate);
+      scheduleTimelineDatesSave(next);
+    },
+    [config.planOptionId, durationWeeks, scheduleTimelineDatesSave, timelineConfig],
+  );
+
+  const brazeTimelineDateChartProps = {
+    timelineDates: timelineDatesLocal,
+    timelinePeriodDatesEditable,
+    onTimelineDateCommit: timelinePeriodDatesEditable ? handleTimelineDateCommit : undefined,
+  };
 
   const flushTimelineAnnotationsToServer = useCallback(async () => {
     if (!config.Config_ID || customerPasswordView) return;
@@ -1512,6 +1595,14 @@ export function CanvasBoard({
     setTimelineAnnotationDoc(next);
     timelineAnnDocRef.current = next;
   }, [config.Config_ID, configTimelineAnnSig]);
+
+  const configTimelineDatesSig = JSON.stringify(config.timelineDates ?? null);
+  useEffect(() => {
+    const next = config.timelineDates ?? [];
+    setTimelineDatesLocal(next);
+    timelineDatesRef.current = next;
+    setDraftTimelineStartDate(timelineStartDateFromDates(next));
+  }, [config.Config_ID, configTimelineDatesSig]);
 
   useEffect(() => {
     if (!allowLayoutAndDrawerEdits) return;
@@ -3269,6 +3360,7 @@ export function CanvasBoard({
 
     const patchBody: Record<string, string> = {
       chosenTitle: chosenTitle === defaultTopToolbarTitle ? "" : chosenTitle,
+      timelineStartDate: draftTimelineStartDate.trim(),
       logoDataUrl: draftLogoDataUrl.trim(),
       onboardingSessionTileColor: parseHexColorOptional(ob) ?? "",
       customerActivityTileColor: parseHexColorOptional(cb) ?? "",
@@ -3316,6 +3408,7 @@ export function CanvasBoard({
     defaultTopToolbarTitle,
     draftButtonColor,
     draftChosenTitle,
+    draftTimelineStartDate,
     draftCustomerActivityTileColor,
     draftLogoDataUrl,
     draftOnboardingSessionTileColor,
@@ -3528,6 +3621,7 @@ export function CanvasBoard({
                     showWeeksRow={showWeeksRow}
                     phaseGridSpans={phaseGridSpans}
                     monthGridSpans={monthGridSpans}
+                    {...brazeTimelineDateChartProps}
                     onOpenTile={setSelectedTile}
                     readOnly
                     timelineRailRef={timelineRef}
@@ -3601,6 +3695,7 @@ export function CanvasBoard({
                   showWeeksRow={showWeeksRow}
                   phaseGridSpans={phaseGridSpans}
                   monthGridSpans={monthGridSpans}
+                  {...brazeTimelineDateChartProps}
                   onOpenTile={setSelectedTile}
                   readOnly
                   timelineRailRef={timelineRef}
@@ -3636,6 +3731,7 @@ export function CanvasBoard({
                     showWeeksRow={showWeeksRow}
                     phaseGridSpans={phaseGridSpans}
                     monthGridSpans={monthGridSpans}
+                    {...brazeTimelineDateChartProps}
                     onOpenTile={setSelectedTile}
                     readOnly={false}
                     timelineRailRef={timelineRef}
@@ -3721,7 +3817,14 @@ export function CanvasBoard({
                         className="flex items-center justify-center border-l border-[#E8E5F8] px-2 py-[5px] text-center text-[11px] font-semibold leading-tight text-[#6B5A9A]"
                         style={{ gridColumn: `span ${monthGridSpans[i]!}` }}
                       >
-                        {month.name}
+                        <EditableTimelinePeriodLabel
+                          index={i}
+                          fallbackLabel={month.name}
+                          isoDate={timelineDatesLocal[i]}
+                          timelineDates={timelineDatesLocal}
+                          editable={timelinePeriodDatesEditable}
+                          onCommit={handleTimelineDateCommit}
+                        />
                       </div>
                     ))}
                   </div>
@@ -3745,7 +3848,14 @@ export function CanvasBoard({
                         className="flex items-center justify-center border-l border-[#E8E5F8] px-2 py-[5px] text-center text-[11px] font-semibold leading-tight text-[#6B5A9A]"
                         style={{ gridColumn: `span ${GROWTH_SILVER_COLUMNS_PER_WEEK}` }}
                       >
-                        {`Week ${index + 1}`}
+                        <EditableTimelinePeriodLabel
+                          index={index}
+                          fallbackLabel={`Week ${index + 1}`}
+                          isoDate={timelineDatesLocal[index]}
+                          timelineDates={timelineDatesLocal}
+                          editable={timelinePeriodDatesEditable}
+                          onCommit={handleTimelineDateCommit}
+                        />
                       </div>
                     ))}
                   </div>
@@ -4009,6 +4119,14 @@ export function CanvasBoard({
                     className="w-full rounded-md border border-[#d4c9f6] bg-white px-2 py-1.5 text-xs font-normal outline-none focus:border-[#8b30e7] disabled:opacity-50"
                   />
                 </label>
+              </div>
+              <div className="mt-2">
+                <ConfigStartDateField
+                  value={draftTimelineStartDate}
+                  onChange={setDraftTimelineStartDate}
+                  disabled={savingConfigColors}
+                  showHint={false}
+                />
               </div>
               <div className="mt-2">
                 <ConfigLogoUploader

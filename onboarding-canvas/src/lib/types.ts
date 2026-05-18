@@ -101,6 +101,11 @@ export type ConfigRecord = {
   brazeCoreWorkstreamOrder?: BrazeWorkstreamOrderEntry[];
   /** Caboodle **TimelineAnnotation** JSON: vertical timeline markers (swimlane + Gantt). */
   timelineAnnotation?: TimelineAnnotationDocument;
+  /**
+   * Caboodle **Timeline_Dates** — `[date1,date2,...]` with ISO dates.
+   * Index 0 is the user start date; later values are +1 month or +1 week (Growth Silver).
+   */
+  timelineDates?: string[];
   channels: ChannelPreferences;
 };
 

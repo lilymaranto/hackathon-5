@@ -1,7 +1,9 @@
 "use client";
 
 import { ConfigTileCategoryColorPickers } from "@/components/ConfigTileCategoryColorPickers";
+import { ConfigStartDateField } from "@/components/ConfigStartDateField";
 import { ConfigLogoUploader } from "@/components/ConfigLogoUploader";
+import { timelineStartDateFromDates } from "@/lib/timeline-dates";
 import { ConfigWorkstreamGradientColorPickers } from "@/components/ConfigWorkstreamGradientColorPickers";
 import { PlanTimelineSelect } from "@/components/PlanTimelineSelect";
 import {
@@ -37,6 +39,9 @@ export function ConfigEditForm({ config }: Props) {
   );
   const [workstreamGradientBottomColor, setWorkstreamGradientBottomColor] = useState(
     config.workstreamGradientBottomColor ?? "",
+  );
+  const [timelineStartDate, setTimelineStartDate] = useState(
+    timelineStartDateFromDates(config.timelineDates),
   );
   const [logoDataUrl, setLogoDataUrl] = useState(config.logoDataUrl ?? "");
   const [logoFileName, setLogoFileName] = useState("");
@@ -97,6 +102,7 @@ export function ConfigEditForm({ config }: Props) {
         customerActivityTileColor: parseHexColorOptional(cb) ?? "",
         buttonColor: parseHexColorOptional(btn) ?? "",
         logoDataUrl: logoDataUrl.trim(),
+        timelineStartDate: timelineStartDate.trim(),
         ...(!isAiDecisioningStudio
           ? {
               workstreamGradientTopColor: parseHexColorOptional(wst) ?? "",
@@ -209,6 +215,14 @@ export function ConfigEditForm({ config }: Props) {
             Optional. If blank on create, password defaults to prospect name lowercase with no spaces.
           </span>
         </label>
+      </div>
+
+      <div className="mt-4">
+        <ConfigStartDateField
+          value={timelineStartDate}
+          onChange={setTimelineStartDate}
+          disabled={saving}
+        />
       </div>
 
       <div className="mt-4">
