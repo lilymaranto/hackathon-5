@@ -1,20 +1,29 @@
 "use client";
 
-import { ConfigStartDateField } from "@/components/ConfigStartDateField";
-import { ConfigLogoUploader } from "@/components/ConfigLogoUploader";
+import { ConfigBrandAssetsSection } from "@/components/ConfigBrandAssetsSection";
+import type { BrandColorFieldId } from "@/lib/brand-color-drag";
 import { ConfigTileCategoryColorPickers } from "@/components/ConfigTileCategoryColorPickers";
 import { ConfigWorkstreamGradientColorPickers } from "@/components/ConfigWorkstreamGradientColorPickers";
 import { PlanTimelineSelect } from "@/components/PlanTimelineSelect";
 import { INDUSTRY_OPTIONS, PRODUCT_OPTIONS } from "@/lib/constants";
+import {
+  BRAND_EXTRACT_CREATE_SCOPE,
+  clearBrandExtractSession,
+  migrateBrandExtractSession,
+} from "@/lib/brand-extract-session";
 import { generateRandomPassword } from "@/lib/password";
 import { parseHexColorOptional } from "@/lib/tile-category-colors";
 import { IndustryType, PlanOptionId, ProductType } from "@/lib/types";
 import { Check } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { FormEvent, useLayoutEffect, useState } from "react";
 
 export function ConfigCreatePageForm() {
   const router = useRouter();
+
+  useLayoutEffect(() => {
+    clearBrandExtractSession(BRAND_EXTRACT_CREATE_SCOPE);
+  }, []);
   const [title, setTitle] = useState("");
   const [productType, setProductType] = useState<ProductType>("Braze Core");
   const [industry, setIndustry] = useState<IndustryType>("Retail & eCommerce");
@@ -122,6 +131,8 @@ export function ConfigCreatePageForm() {
       return;
     }
 
+    migrateBrandExtractSession(BRAND_EXTRACT_CREATE_SCOPE, payload.data.Config_ID);
+
     router.push(`/employee/configs/${payload.data.Config_ID}`);
     router.refresh();
   }
@@ -135,17 +146,17 @@ export function ConfigCreatePageForm() {
 
   return (
     <form onSubmit={onSubmit} className="rounded-2xl border border-[#d7ccf6] bg-white p-6 shadow-sm">
-      <h2 className="text-base font-semibold text-[#2c1650]">Create Config</h2>
+      <h1 className="text-2xl font-semibold text-[#300266]">Create Config</h1>
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         <label className="flex flex-col gap-1 text-xs font-semibold text-[#2c1650]">
           <span className="inline-flex w-fit items-center gap-0.5">
-            Prospect name <span className="text-[#cf3a50]">*</span>
+            Prospect Name <span className="text-[#cf3a50]">*</span>
           </span>
           <input
             value={title}
             onChange={(event) => setTitle(event.target.value)}
             className="rounded-lg border border-[#d4c9f6] px-3 py-2 text-xs font-normal outline-none focus:border-[#8b30e7]"
-            placeholder="Prospect name"
+            placeholder="Prospect Name"
           />
         </label>
         <label className="flex flex-col gap-1 text-xs font-semibold text-[#2c1650]">
@@ -234,15 +245,10 @@ export function ConfigCreatePageForm() {
       </div>
 
       <div className="mt-4">
-        <ConfigStartDateField
-          value={timelineStartDate}
-          onChange={setTimelineStartDate}
-          disabled={isSaving}
-        />
-      </div>
-
-      <div className="mt-4">
-        <ConfigLogoUploader
+        <ConfigBrandAssetsSection
+          brandExtractScope={BRAND_EXTRACT_CREATE_SCOPE}
+          timelineStartDate={timelineStartDate}
+          onTimelineStartDateChange={setTimelineStartDate}
           logoDataUrl={logoDataUrl}
           logoFileName={logoFileName}
           disabled={isSaving}
@@ -255,10 +261,14 @@ export function ConfigCreatePageForm() {
             setLogoFileName("");
           }}
           onError={setError}
-        />
-      </div>
-
-      <div className="mt-4">
+          onApplyColor={(field: BrandColorFieldId, hex) => {
+            if (field === "onboarding") setOnboardingSessionTileColor(hex);
+            else if (field === "customer") setCustomerActivityTileColor(hex);
+            else if (field === "button") setButtonColor(hex);
+            else if (field === "workstreamTop") setWorkstreamGradientTopColor(hex);
+            else if (field === "workstreamBottom") setWorkstreamGradientBottomColor(hex);
+          }}
+        >
         <ConfigTileCategoryColorPickers
           variant="page"
           disabled={isSaving}
@@ -271,7 +281,6 @@ export function ConfigCreatePageForm() {
           onChangeButton={setButtonColor}
         />
         {!isAiDecisioningStudio ? (
-          <div className="mt-4">
             <ConfigWorkstreamGradientColorPickers
               variant="page"
               disabled={isSaving}
@@ -280,8 +289,8 @@ export function ConfigCreatePageForm() {
               onChangeTop={setWorkstreamGradientTopColor}
               onChangeBottom={setWorkstreamGradientBottomColor}
             />
-          </div>
         ) : null}
+        </ConfigBrandAssetsSection>
       </div>
 
       {error ? <p className="mt-3 text-xs text-[#cf3a50]">{error}</p> : null}

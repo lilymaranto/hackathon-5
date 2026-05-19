@@ -115,7 +115,7 @@ export function normalizeBrazeCoreWorkstreamOrder(
   return out;
 }
 
-/** Parse Caboodle column JSON → canonical entries (uses gradient on full saved id order when both ends set). */
+/** Parse Caboodle column JSON → canonical entries (uses gradient when either gradient endpoint is set). */
 export function parseBrazeCoreWorkstreamOrderJson(
   raw: unknown,
   workstreamGradientTopColor?: string,

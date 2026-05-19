@@ -7,8 +7,8 @@ import {
 import { AddSwimlaneTilePanel } from "@/components/AddSwimlaneTilePanel";
 import { BrazeCoreResourcesChart } from "@/components/BrazeCoreResourcesChart";
 import { BrazeCoreSpanResizeHandle } from "@/components/BrazeCoreSpanResizeHandle";
-import { ConfigStartDateField } from "@/components/ConfigStartDateField";
-import { ConfigLogoUploader } from "@/components/ConfigLogoUploader";
+import { ConfigBrandAssetsSection } from "@/components/ConfigBrandAssetsSection";
+import type { BrandColorFieldId } from "@/lib/brand-color-drag";
 import { EditableTimelinePeriodLabel } from "@/components/EditableTimelinePeriodLabel";
 import { ConfigTileCategoryColorPickers } from "@/components/ConfigTileCategoryColorPickers";
 import { ConfigWorkstreamGradientColorPickers } from "@/components/ConfigWorkstreamGradientColorPickers";
@@ -3249,14 +3249,28 @@ export function CanvasBoard({
     [canvasToolbarAccent],
   );
 
+  const configColorEditorSaveAccent = useMemo(
+    () =>
+      parseHexColorOptional(draftButtonColor) ??
+      parseHexColorOptional(config.buttonColor) ??
+      DEFAULT_TOOLBAR_BUTTON_HEX,
+    [draftButtonColor, config.buttonColor],
+  );
+  const configColorEditorSaveHover = useMemo(
+    () => toolbarPrimaryHoverHex(configColorEditorSaveAccent),
+    [configColorEditorSaveAccent],
+  );
+
   const canvasToolbarCss = useMemo(
     () =>
-      `#${canvasToolbarScopeId} .canvasToolbarAddBtn{background-color:${canvasToolbarAccent}!important}#${canvasToolbarScopeId} .canvasToolbarAddBtn:hover:not(:disabled){background-color:${canvasToolbarPrimaryHover}!important}#${canvasToolbarScopeId} .canvasToolbarAddBtn:focus-visible{outline:2px solid ${canvasToolbarAccent};outline-offset:2px}#${canvasToolbarScopeId} .canvasToolbarViewToggle{border-color:${canvasToolbarAccent}!important;color:${canvasToolbarAccent}!important}#${canvasToolbarScopeId} .canvasToolbarViewToggle:hover{background-color:${canvasToolbarOutlineHoverBg}!important}#${canvasToolbarScopeId} .canvasToolbarSave{background-color:${canvasToolbarAccent}!important}#${canvasToolbarScopeId} .canvasToolbarSave:hover:not(:disabled){background-color:${canvasToolbarPrimaryHover}!important}#${canvasToolbarScopeId} .canvasToolbarCheckbox{accent-color:${canvasToolbarAccent}}`,
+      `#${canvasToolbarScopeId} .canvasToolbarAddBtn{background-color:${canvasToolbarAccent}!important}#${canvasToolbarScopeId} .canvasToolbarAddBtn:hover:not(:disabled){background-color:${canvasToolbarPrimaryHover}!important}#${canvasToolbarScopeId} .canvasToolbarAddBtn:focus-visible{outline:2px solid ${canvasToolbarAccent};outline-offset:2px}#${canvasToolbarScopeId} .canvasToolbarViewToggle{border-color:${canvasToolbarAccent}!important;color:${canvasToolbarAccent}!important}#${canvasToolbarScopeId} .canvasToolbarViewToggle:hover{background-color:${canvasToolbarOutlineHoverBg}!important}#${canvasToolbarScopeId} .canvasToolbarSave{background-color:${canvasToolbarAccent}!important}#${canvasToolbarScopeId} .canvasToolbarSave:hover:not(:disabled){background-color:${canvasToolbarPrimaryHover}!important}#${canvasToolbarScopeId} .canvasToolbarCheckbox{accent-color:${canvasToolbarAccent}}.configColorEditorPrimaryBtn{background-color:${configColorEditorSaveAccent}!important}.configColorEditorPrimaryBtn:hover:not(:disabled){background-color:${configColorEditorSaveHover}!important}`,
     [
       canvasToolbarScopeId,
       canvasToolbarAccent,
       canvasToolbarPrimaryHover,
       canvasToolbarOutlineHoverBg,
+      configColorEditorSaveAccent,
+      configColorEditorSaveHover,
     ],
   );
 
@@ -3420,9 +3434,9 @@ export function CanvasBoard({
 
   return (
     <div className="relative">
+      <style dangerouslySetInnerHTML={{ __html: canvasToolbarCss }} />
       {(showSaveToolbar || showBrazeViewToggle || isAiDecisioningStudio) && (
         <div id={canvasToolbarScopeId} className="mb-3 w-full">
-          <style dangerouslySetInnerHTML={{ __html: canvasToolbarCss }} />
           <div
             className={clsx(
               "relative flex w-full justify-between gap-2",
@@ -4121,15 +4135,11 @@ export function CanvasBoard({
                 </label>
               </div>
               <div className="mt-2">
-                <ConfigStartDateField
-                  value={draftTimelineStartDate}
-                  onChange={setDraftTimelineStartDate}
-                  disabled={savingConfigColors}
-                  showHint={false}
-                />
-              </div>
-              <div className="mt-2">
-                <ConfigLogoUploader
+                <ConfigBrandAssetsSection
+                  brandExtractScope={config.Config_ID}
+                  timelineStartDate={draftTimelineStartDate}
+                  onTimelineStartDateChange={setDraftTimelineStartDate}
+                  showTimelineHint={false}
                   logoDataUrl={draftLogoDataUrl}
                   logoFileName={draftLogoFileName}
                   disabled={savingConfigColors}
@@ -4142,9 +4152,14 @@ export function CanvasBoard({
                     setDraftLogoFileName("");
                   }}
                   onError={setConfigColorEditorError}
-                />
-              </div>
-              <div className="mt-4">
+                  onApplyColor={(field: BrandColorFieldId, hex) => {
+                    if (field === "onboarding") setDraftOnboardingSessionTileColor(hex);
+                    else if (field === "customer") setDraftCustomerActivityTileColor(hex);
+                    else if (field === "button") setDraftButtonColor(hex);
+                    else if (field === "workstreamTop") setDraftWorkstreamGradientTopColor(hex);
+                    else if (field === "workstreamBottom") setDraftWorkstreamGradientBottomColor(hex);
+                  }}
+                >
                 <ConfigTileCategoryColorPickers
                   variant="page"
                   disabled={savingConfigColors}
@@ -4156,9 +4171,7 @@ export function CanvasBoard({
                   onChangeCustomer={setDraftCustomerActivityTileColor}
                   onChangeButton={setDraftButtonColor}
                 />
-              </div>
               {!isAiDecisioningStudio ? (
-                <div className="mt-4">
                   <ConfigWorkstreamGradientColorPickers
                     variant="page"
                     disabled={savingConfigColors}
@@ -4167,8 +4180,9 @@ export function CanvasBoard({
                     onChangeTop={setDraftWorkstreamGradientTopColor}
                     onChangeBottom={setDraftWorkstreamGradientBottomColor}
                   />
-                </div>
               ) : null}
+                </ConfigBrandAssetsSection>
+              </div>
               {configColorEditorError ? (
                 <p className="mt-4 text-sm text-[#cf3a50]">{configColorEditorError}</p>
               ) : null}
@@ -4189,7 +4203,7 @@ export function CanvasBoard({
                 type="button"
                 disabled={savingConfigColors}
                 onClick={() => void saveConfigColors()}
-                className="rounded-md bg-[#801ED7] px-4 py-2 text-sm font-semibold text-white hover:bg-[#6b18b8] disabled:opacity-60"
+                className="configColorEditorPrimaryBtn rounded-md px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-60"
               >
                 {savingConfigColors ? "Saving..." : "Save"}
               </button>

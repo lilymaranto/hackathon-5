@@ -2,16 +2,27 @@
 
 import clsx from "clsx";
 import Cropper, { Area } from "react-easy-crop";
+import { useOptionalBrandExtract } from "@/components/brand/brand-extract-context";
+import {
+  getDroppedImageFile,
+  isHttpLogoUrl,
+  logoSourceDisplayName,
+  normalizeLogoHttpUrl,
+  readLogoUrlFromDataTransfer,
+} from "@/lib/config-logo";
 import {
   ChangeEvent,
   DragEvent,
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
 
 const MAX_LOGO_BYTES = 1_500_000;
+
+type UrlApplyState = "idle" | "loading" | "ok" | "fail";
 
 type Props = {
   logoDataUrl: string;
@@ -73,6 +84,14 @@ function fileToDataUrl(file: File): Promise<string> {
   });
 }
 
+function logoLabelFromUrl(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return "Logo from URL";
+  }
+}
+
 export function ConfigLogoUploader({
   logoDataUrl,
   logoFileName,
@@ -81,7 +100,9 @@ export function ConfigLogoUploader({
   onRemoveLogo,
   onError,
 }: Props) {
+  const brandExtract = useOptionalBrandExtract();
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const dropZoneRef = useRef<HTMLDivElement | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [cropSourceDataUrl, setCropSourceDataUrl] = useState("");
   const [cropSourceName, setCropSourceName] = useState("");
@@ -91,11 +112,36 @@ export function ConfigLogoUploader({
   const [cropAspect, setCropAspect] = useState(3);
   const [cropAreaPixels, setCropAreaPixels] = useState<Area | null>(null);
   const [isCropping, setIsCropping] = useState(false);
+  const [logoUrlDraft, setLogoUrlDraft] = useState("");
+  const [urlProbeSrc, setUrlProbeSrc] = useState("");
+  const [urlApplyState, setUrlApplyState] = useState<UrlApplyState>("idle");
+  const [urlApplyMessage, setUrlApplyMessage] = useState<string | null>(null);
 
-  const selectedName = useMemo(() => {
-    if (logoFileName.trim()) return logoFileName.trim();
-    return "Current logo";
-  }, [logoFileName]);
+  const selectedName = useMemo(
+    () => logoSourceDisplayName(logoDataUrl, logoFileName),
+    [logoDataUrl, logoFileName],
+  );
+
+  const canSubmitUrl = useMemo(() => {
+    const draft = logoUrlDraft.trim();
+    if (!draft) return false;
+    return isHttpLogoUrl(draft);
+  }, [logoUrlDraft]);
+
+  useEffect(() => {
+    if (!logoDataUrl.trim()) {
+      setLogoUrlDraft("");
+      setUrlProbeSrc("");
+      setUrlApplyState("idle");
+      setUrlApplyMessage(null);
+      return;
+    }
+    if (isHttpLogoUrl(logoDataUrl)) {
+      setLogoUrlDraft(logoDataUrl.trim());
+      setUrlApplyState("ok");
+      setUrlApplyMessage("Looks good!");
+    }
+  }, [logoDataUrl]);
 
   const validateFile = useCallback(
     (file: File): boolean => {
@@ -130,6 +176,9 @@ export function ConfigLogoUploader({
         setCropSourceName(file.name);
         setCropOpen(true);
         onError(null);
+        setUrlApplyState("idle");
+        setUrlApplyMessage(null);
+        setUrlProbeSrc("");
       } catch (error) {
         onError(error instanceof Error ? error.message : "Unable to read logo file.");
       }
@@ -147,32 +196,64 @@ export function ConfigLogoUploader({
   );
 
   const onDragOver = useCallback(
-    (event: DragEvent<HTMLDivElement>) => {
+    (event: DragEvent<HTMLElement>) => {
       event.preventDefault();
       event.stopPropagation();
       if (disabled) return;
+      event.dataTransfer.dropEffect = "copy";
       setIsDragOver(true);
     },
     [disabled],
   );
 
-  const onDragLeave = useCallback((event: DragEvent<HTMLDivElement>) => {
+  const onDragLeave = useCallback((event: DragEvent<HTMLElement>) => {
     event.preventDefault();
     event.stopPropagation();
+    const related = event.relatedTarget;
+    if (
+      related instanceof Node &&
+      dropZoneRef.current?.contains(related)
+    ) {
+      return;
+    }
     setIsDragOver(false);
   }, []);
 
+  const beginLogoUrlApply = useCallback(
+    (rawUrl: string) => {
+      try {
+        const normalized = normalizeLogoHttpUrl(rawUrl);
+        setLogoUrlDraft(normalized);
+        setUrlApplyState("loading");
+        setUrlApplyMessage(null);
+        onError(null);
+        setUrlProbeSrc(normalized);
+      } catch (error) {
+        setUrlApplyState("fail");
+        setUrlApplyMessage(
+          error instanceof Error ? error.message : "Enter a valid http(s) image URL.",
+        );
+      }
+    },
+    [onError],
+  );
+
   const onDrop = useCallback(
-    async (event: DragEvent<HTMLDivElement>) => {
+    async (event: DragEvent<HTMLElement>) => {
       event.preventDefault();
       event.stopPropagation();
       setIsDragOver(false);
       if (disabled) return;
-      const file = event.dataTransfer.files?.[0];
+      const droppedUrl = readLogoUrlFromDataTransfer(event.dataTransfer);
+      if (droppedUrl) {
+        beginLogoUrlApply(droppedUrl);
+        return;
+      }
+      const file = getDroppedImageFile(event.dataTransfer);
       if (!file) return;
       await startCropFromFile(file);
     },
-    [disabled, startCropFromFile],
+    [beginLogoUrlApply, disabled, startCropFromFile],
   );
 
   const onApplyCrop = useCallback(async () => {
@@ -191,6 +272,9 @@ export function ConfigLogoUploader({
       onChangeLogo(croppedDataUrl, cropSourceName || "Uploaded logo");
       onError(null);
       setCropOpen(false);
+      setUrlApplyState("idle");
+      setUrlApplyMessage(null);
+      setUrlProbeSrc("");
     } catch (error) {
       onError(error instanceof Error ? error.message : "Unable to crop logo.");
     } finally {
@@ -198,62 +282,173 @@ export function ConfigLogoUploader({
     }
   }, [cropAreaPixels, cropSourceDataUrl, cropSourceName, onChangeLogo, onError]);
 
+  const onUrlProbeLoad = useCallback(() => {
+    if (!urlProbeSrc) return;
+    const label = logoLabelFromUrl(urlProbeSrc);
+    onChangeLogo(urlProbeSrc, label);
+    onError(null);
+    setUrlApplyState("ok");
+    setUrlApplyMessage("Looks good!");
+    setUrlProbeSrc("");
+  }, [onChangeLogo, onError, urlProbeSrc]);
+
+  const onUrlProbeError = useCallback(() => {
+    setUrlApplyState("fail");
+    setUrlApplyMessage(
+      "Could not load this image. Check the URL or try another format.",
+    );
+    onError("Could not load logo from URL.");
+    setUrlProbeSrc("");
+  }, [onError]);
+
+  const onUseLogoUrl = useCallback(() => {
+    if (disabled || !canSubmitUrl) return;
+    beginLogoUrlApply(logoUrlDraft);
+  }, [beginLogoUrlApply, canSubmitUrl, disabled, logoUrlDraft]);
+
+  useEffect(() => {
+    if (!brandExtract) return;
+    const applier = (url: string) => beginLogoUrlApply(url);
+    brandExtract.registerLogoApplier(applier);
+    return () => brandExtract.registerLogoApplier(null);
+  }, [brandExtract, beginLogoUrlApply]);
+
+  const showUrlFeedback = urlApplyState !== "idle";
+  const showSavedLogoPreview = Boolean(logoDataUrl) && urlApplyState !== "loading";
+
+  const dropTargetHandlers = {
+    onDragEnter: onDragOver,
+    onDragOver,
+    onDragLeave,
+    onDrop,
+  };
+
   return (
-    <div>
-      <label className="mb-[4px] block text-[12px] font-semibold text-[#2c1650]">Logo</label>
-      <p className="mb-[7px] text-[10px] text-[#6b5798]">
-        Optional. Use a transparent background when possible (I use remove.bg when needing to take out background).
-      </p>
+    <>
+      <div className="mt-2">
+        <p className="text-xs font-semibold text-[#2c1650]">Logo</p>
+        <p className="mt-0.5 text-[10px] leading-snug text-[#6b5798]">
+          Optional. Use a transparent background when possible (I use remove.bg when needing to take out
+          background).
+        </p>
+      </div>
+
+      <div className="rounded-md border border-[#e8dff9] bg-[#faf8ff] px-3 py-1.5">
       <input
         ref={inputRef}
         type="file"
-        accept="image/png,image/svg+xml,image/webp,image/avif"
+        accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/webp,image/avif"
         onChange={onFileInputChange}
         className="hidden"
         disabled={disabled}
       />
+
       <div
+        ref={dropZoneRef}
         className={clsx(
-          "mb-[7px] rounded-md border border-dashed border-[#d4c9f6] bg-[#fbf8ff] p-2",
-          isDragOver && "border-[#8b30e7] bg-[#f6efff]",
+          "mt-1.5 rounded-md border border-dashed border-[#d4c9f6] bg-white p-1",
+          isDragOver && "border-[#8b30e7] bg-[#f6efff] ring-1 ring-[#8b30e7]/40",
           disabled && "opacity-60",
         )}
-        onDragOver={onDragOver}
-        onDragLeave={onDragLeave}
-        onDrop={onDrop}
+        {...dropTargetHandlers}
       >
-        <p className="mb-2 text-[10px] text-[#6b5798]">Drag and drop photo here.</p>
+        <p className="mb-1 text-[10px] text-[#6b5798]">Drag and drop photo here.</p>
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             disabled={disabled}
             onClick={() => inputRef.current?.click()}
             className="rounded-md border border-[#d4c9f6] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#4a2b7a] hover:bg-[#f6efff] disabled:opacity-50"
+            {...dropTargetHandlers}
           >
             Upload photo
           </button>
           <button
             type="button"
             disabled={disabled || !logoDataUrl}
-            onClick={onRemoveLogo}
+            onClick={() => {
+              onRemoveLogo();
+              setUrlApplyState("idle");
+              setUrlApplyMessage(null);
+              setUrlProbeSrc("");
+            }}
             className="rounded-md border border-[#d4c9f6] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#4a2b7a] hover:bg-[#f6efff] disabled:opacity-50"
+            {...dropTargetHandlers}
           >
             Remove photo
           </button>
         </div>
       </div>
-      {logoDataUrl ? (
-        <div className="mt-[7px] flex flex-wrap items-center gap-[0.675rem]">
+
+      <p className="mt-1.5 text-[10px] font-semibold text-[#2c1650]">Or use an image URL</p>
+      <div className="mt-1 flex flex-col gap-1 sm:flex-row sm:items-start">
+        <input
+          type="url"
+          value={logoUrlDraft}
+          disabled={disabled}
+          onChange={(event) => {
+            setLogoUrlDraft(event.target.value);
+            setUrlApplyState("idle");
+            setUrlApplyMessage(null);
+            onError(null);
+          }}
+          placeholder="https://example.com/logo.png"
+          className="min-w-0 flex-1 rounded-md border border-[#d4c9f6] bg-white px-2 py-1.5 text-[11px] font-normal outline-none focus:border-[#8b30e7] disabled:opacity-50"
+        />
+        <button
+          type="button"
+          disabled={disabled || !canSubmitUrl || urlApplyState === "loading"}
+          onClick={onUseLogoUrl}
+          className="shrink-0 rounded-md border border-[#8b30e7] bg-[#f8f4ff] px-3 py-1.5 text-[11px] font-semibold text-[#8b30e7] hover:bg-[#efe6ff] disabled:opacity-50"
+        >
+          Use photo
+        </button>
+      </div>
+
+      {urlProbeSrc ? (
+        <img
+          src={urlProbeSrc}
+          alt=""
+          className="sr-only"
+          onLoad={onUrlProbeLoad}
+          onError={onUrlProbeError}
+        />
+      ) : null}
+
+      {showUrlFeedback ? (
+        <div className="mt-1">
+          {urlApplyState === "loading" ? (
+            <p className="text-[10px] text-[#6b5798]">Loading preview…</p>
+          ) : null}
+          {urlApplyState === "fail" && urlApplyMessage ? (
+            <p className="text-[10px] text-[#cf3a50]">{urlApplyMessage}</p>
+          ) : null}
+          {urlApplyState === "ok" && urlApplyMessage ? (
+            <p className="text-[10px] font-semibold text-[#2c1650]">{urlApplyMessage}</p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {showSavedLogoPreview ? (
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5 border-t border-[#e8dff9] pt-1.5">
           <img
             src={logoDataUrl}
             alt="Config logo preview"
             className="max-h-[90px] w-auto max-w-[220px] rounded-md border border-[#e8dff9] bg-white p-1 object-contain"
           />
           <div className="flex min-w-0 flex-col gap-1">
-            <span className="max-w-[14rem] truncate text-[10px] text-[#6b5798]">{selectedName}</span>
+            <span className="max-w-[14rem] truncate text-[10px] font-semibold text-[#6b5798]">
+              {selectedName}
+            </span>
+            {isHttpLogoUrl(logoDataUrl) ? (
+              <span className="max-w-[14rem] truncate text-[10px] text-[#6b5798]" title={logoDataUrl}>
+                {logoDataUrl}
+              </span>
+            ) : null}
           </div>
         </div>
       ) : null}
+      </div>
 
       {cropOpen ? (
         <div className="fixed inset-0 z-[260] flex items-center justify-center p-4">
@@ -325,6 +520,6 @@ export function ConfigLogoUploader({
           </div>
         </div>
       ) : null}
-    </div>
+    </>
   );
 }

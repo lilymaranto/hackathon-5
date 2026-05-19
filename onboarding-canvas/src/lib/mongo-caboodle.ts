@@ -15,6 +15,7 @@ import {
   parseBrazeCoreWorkstreamOrderJson,
   railColorResolverForWorkstreamOrder,
 } from "@/lib/braze-workstream-order";
+import { isHttpLogoUrl, normalizeLogoHttpUrl } from "@/lib/config-logo";
 import { parseTimelineDatesField, serializeTimelineDates } from "@/lib/timeline-dates";
 import {
   ConfigRecord,
@@ -124,9 +125,14 @@ const ALLOWED_LOGO_MIME_TYPES = new Set([
 function normalizeLogoDataUrl(value: unknown): string | undefined {
   const raw = String(value ?? "").trim();
   if (!raw) return undefined;
+  if (isHttpLogoUrl(raw)) {
+    return normalizeLogoHttpUrl(raw);
+  }
   const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/.exec(raw);
   if (!match) {
-    throw new Error("Invalid logo format. Please upload a PNG, SVG, WebP, or AVIF image.");
+    throw new Error(
+      "Invalid logo format. Upload an image or use an http(s) URL to a PNG, SVG, WebP, or AVIF file.",
+    );
   }
   const mimeType = match[1]!.toLowerCase();
   if (!ALLOWED_LOGO_MIME_TYPES.has(mimeType)) {

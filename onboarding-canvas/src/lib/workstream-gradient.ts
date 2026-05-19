@@ -1,5 +1,9 @@
+import { WORKSTREAMS } from "@/lib/constants";
 import type { Workstream } from "@/lib/types";
 import { parseHexColorOptional } from "@/lib/tile-category-colors";
+
+const DEFAULT_GRADIENT_TOP = WORKSTREAMS[0]!.color;
+const DEFAULT_GRADIENT_BOTTOM = WORKSTREAMS[WORKSTREAMS.length - 1]!.color;
 
 function rgbFromNormalizedHex(hex: string): { r: number; g: number; b: number } {
   const n = parseInt(hex.slice(1), 16);
@@ -27,17 +31,22 @@ export function interpolateHex(topHex: string, bottomHex: string, t: number): st
 }
 
 /**
- * When both gradient endpoints are valid hex, maps each visible workstream (in display order)
- * to a color stepped evenly from top (first row) to bottom (last row).
+ * When at least one gradient endpoint is set, maps each visible workstream (in display order)
+ * to a color stepped evenly from top (first row) to bottom (last row). Missing endpoints use
+ * the default Braze workstream rail colors (first / last in {@link WORKSTREAMS}).
  */
 export function buildWorkstreamGradientColorMap(
   visibleWorkstreamIdsOrdered: readonly Workstream[],
   topRaw: string | undefined,
   bottomRaw: string | undefined,
 ): ReadonlyMap<Workstream, string> | undefined {
-  const top = parseHexColorOptional(topRaw);
-  const bottom = parseHexColorOptional(bottomRaw);
-  if (!top || !bottom) return undefined;
+  const topCustom = parseHexColorOptional(topRaw);
+  const bottomCustom = parseHexColorOptional(bottomRaw);
+  if (!topCustom && !bottomCustom) return undefined;
+
+  const top = topCustom ?? DEFAULT_GRADIENT_TOP;
+  const bottom = bottomCustom ?? DEFAULT_GRADIENT_BOTTOM;
+
   const n = visibleWorkstreamIdsOrdered.length;
   if (n === 0) return undefined;
   const map = new Map<Workstream, string>();

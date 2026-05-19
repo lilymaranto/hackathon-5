@@ -15,7 +15,7 @@ export function ConfigStartDateField({
   showHint = true,
 }: Props) {
   return (
-    <label className="flex flex-col gap-1 text-xs font-semibold text-[#2c1650]">
+    <label className="flex flex-col gap-0.5 text-xs font-semibold text-[#2c1650]">
       Start Date <span className="font-normal text-[#6b5798]">Optional</span>
       <input
         type="date"

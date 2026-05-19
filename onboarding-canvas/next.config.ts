@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 const appRoot = path.dirname(fileURLToPath(import.meta.url));
 
 const nextConfig: NextConfig = {
+  serverExternalPackages: ["openbrand", "sharp"],
   turbopack: {
     // Avoid picking e.g. ~/package-lock.json as the workspace root (watches too much, huge memory).
     root: appRoot,

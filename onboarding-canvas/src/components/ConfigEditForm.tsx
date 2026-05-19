@@ -1,8 +1,8 @@
 "use client";
 
 import { ConfigTileCategoryColorPickers } from "@/components/ConfigTileCategoryColorPickers";
-import { ConfigStartDateField } from "@/components/ConfigStartDateField";
-import { ConfigLogoUploader } from "@/components/ConfigLogoUploader";
+import { ConfigBrandAssetsSection } from "@/components/ConfigBrandAssetsSection";
+import type { BrandColorFieldId } from "@/lib/brand-color-drag";
 import { timelineStartDateFromDates } from "@/lib/timeline-dates";
 import { ConfigWorkstreamGradientColorPickers } from "@/components/ConfigWorkstreamGradientColorPickers";
 import { PlanTimelineSelect } from "@/components/PlanTimelineSelect";
@@ -139,17 +139,20 @@ export function ConfigEditForm({ config }: Props) {
 
   return (
     <form onSubmit={onSubmit} className="rounded-2xl border border-[#d7ccf6] bg-white p-6 shadow-sm">
-      <h2 className="text-base font-semibold text-[#2c1650]">Edit Config</h2>
+      <h1 className="text-2xl font-semibold text-[#300266]">
+        {(title.trim() || config.Title).trim() || "Prospect"}
+      </h1>
+      <h2 className="mt-2 text-base font-semibold text-[#2c1650]">Edit Config</h2>
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         <label className="flex flex-col gap-1 text-xs font-semibold text-[#2c1650]">
           <span className="inline-flex w-fit items-center gap-0.5">
-            Prospect name <span className="text-[#cf3a50]">*</span>
+            Prospect Name <span className="text-[#cf3a50]">*</span>
           </span>
           <input
             value={title}
             onChange={(event) => setTitle(event.target.value)}
             className="rounded-lg border border-[#d4c9f6] px-3 py-2 text-xs font-normal outline-none focus:border-[#8b30e7]"
-            placeholder="Prospect name"
+            placeholder="Prospect Name"
           />
         </label>
         <label className="flex flex-col gap-1 text-xs font-semibold text-[#2c1650]">
@@ -218,15 +221,10 @@ export function ConfigEditForm({ config }: Props) {
       </div>
 
       <div className="mt-4">
-        <ConfigStartDateField
-          value={timelineStartDate}
-          onChange={setTimelineStartDate}
-          disabled={saving}
-        />
-      </div>
-
-      <div className="mt-4">
-        <ConfigLogoUploader
+        <ConfigBrandAssetsSection
+          brandExtractScope={config.Config_ID}
+          timelineStartDate={timelineStartDate}
+          onTimelineStartDateChange={setTimelineStartDate}
           logoDataUrl={logoDataUrl}
           logoFileName={logoFileName}
           disabled={saving}
@@ -239,10 +237,14 @@ export function ConfigEditForm({ config }: Props) {
             setLogoFileName("");
           }}
           onError={setError}
-        />
-      </div>
-
-      <div className="mt-4">
+          onApplyColor={(field: BrandColorFieldId, hex) => {
+            if (field === "onboarding") setOnboardingSessionTileColor(hex);
+            else if (field === "customer") setCustomerActivityTileColor(hex);
+            else if (field === "button") setButtonColor(hex);
+            else if (field === "workstreamTop") setWorkstreamGradientTopColor(hex);
+            else if (field === "workstreamBottom") setWorkstreamGradientBottomColor(hex);
+          }}
+        >
         <ConfigTileCategoryColorPickers
           variant="page"
           disabled={saving}
@@ -255,7 +257,6 @@ export function ConfigEditForm({ config }: Props) {
           onChangeButton={setButtonColor}
         />
         {!isAiDecisioningStudio && (
-          <div className="mt-4">
             <ConfigWorkstreamGradientColorPickers
               variant="page"
               disabled={saving}
@@ -264,8 +265,8 @@ export function ConfigEditForm({ config }: Props) {
               onChangeTop={setWorkstreamGradientTopColor}
               onChangeBottom={setWorkstreamGradientBottomColor}
             />
-          </div>
         )}
+        </ConfigBrandAssetsSection>
       </div>
 
       {error && <p className="mt-3 text-xs text-[#cf3a50]">{error}</p>}
