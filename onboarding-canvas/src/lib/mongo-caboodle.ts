@@ -7,6 +7,7 @@ import {
   parseExplicitPlanOptionFromRecord,
   resolvePlanOptionId,
 } from "@/lib/constants";
+import { parseCustomerActivityLed } from "@/lib/customer-activity-led";
 import { parseHexColorOptional } from "@/lib/tile-category-colors";
 import {
   BRAZE_CORE_WORKSTREAM_IDS,
@@ -332,6 +333,20 @@ function normalizeConfig(record: Record<string, unknown>): ConfigRecord {
     timelineAnnotation,
     ...(timelineDates?.length ? { timelineDates } : {}),
     channels: normalizeChannels(record),
+    ...(parseChannelBool(
+      record.Hands_On_Keyboard_Support ??
+        record.hands_on_keyboard_support ??
+        record.handsOnKeyboardSupport,
+      false,
+    )
+      ? { handsOnKeyboardSupport: true }
+      : {}),
+    ...(() => {
+      const partner = String(
+        record.Partner_Name ?? record.partner_name ?? record.partnerName ?? "",
+      ).trim();
+      return partner ? { partnerName: partner } : {};
+    })(),
   };
 }
 
@@ -365,6 +380,15 @@ function normalizeTile(record: Record<string, unknown>): TileRecord {
     Agenda: pickMultiLineField(record, ["Agenda", "agenda"]),
     Resources: pickMultiLineField(record, ["Resources", "resources"]),
     Desired_Outcomes: pickMultiLineField(record, ["Desired_Outcomes", "Desired Outcomes", "desired_outcomes"]),
+    activityLed: parseCustomerActivityLed(
+      record.Activity_Led ?? record.activity_led ?? record.activityLed,
+    ),
+    Level_Of_Effort: pickMultiLineField(record, [
+      "Level_Of_Effort",
+      "Level Of Effort",
+      "level_of_effort",
+      "levelOfEffort",
+    ]),
     CaboodlePatchKey: patchKey,
   };
 }
@@ -431,6 +455,8 @@ export async function createConfigWithSeed(input: {
   workstreamGradientBottomColor?: string;
   logoDataUrl?: string;
   timelineDates?: string[];
+  handsOnKeyboardSupport?: boolean;
+  partnerName?: string;
 }): Promise<ConfigRecord> {
   const { configs, tiles } = await getMongoCollections();
   const configId = `${input.title.toLowerCase().replace(/\s+/g, "-")}-${Math.random().toString(36).slice(2, 6)}`;
@@ -482,6 +508,10 @@ export async function createConfigWithSeed(input: {
     Channel_WhatsApp: Boolean(ch.whatsapp),
     Channel_InProduct: Boolean(ch.inProductMessaging),
     Timeline_Dates: serializeTimelineDates(input.timelineDates ?? []),
+    Hands_On_Keyboard_Support: Boolean(input.handsOnKeyboardSupport),
+    Partner_Name: input.handsOnKeyboardSupport
+      ? String(input.partnerName ?? "").trim()
+      : "",
   });
 
   const seedTiles = (
@@ -513,6 +543,8 @@ export async function createConfigWithSeed(input: {
       Agenda: "",
       Resources: "",
       Desired_Outcomes: "",
+      Level_Of_Effort: "",
+      ...(tile.Category === "customer_activity" ? { Activity_Led: "customer" } : {}),
     };
   });
 
@@ -599,6 +631,10 @@ export async function duplicateConfig(sourceConfigId: string, createdBy: string)
     Channel_WhatsApp: Boolean(ch.whatsapp),
     Channel_InProduct: Boolean(ch.inProductMessaging),
     Timeline_Dates: serializeTimelineDates(source.timelineDates ?? []),
+    Hands_On_Keyboard_Support: Boolean(source.handsOnKeyboardSupport),
+    Partner_Name: source.handsOnKeyboardSupport
+      ? String(source.partnerName ?? "").trim()
+      : "",
   });
 
   const duplicateTiles = sourceTiles.map((t) => ({
@@ -618,6 +654,10 @@ export async function duplicateConfig(sourceConfigId: string, createdBy: string)
     Agenda: t.Agenda ?? "",
     Resources: t.Resources ?? "",
     Desired_Outcomes: t.Desired_Outcomes ?? "",
+    Level_Of_Effort: t.Level_Of_Effort ?? "",
+    ...(t.Category === "customer_activity"
+      ? { Activity_Led: parseCustomerActivityLed(t.activityLed) }
+      : {}),
   }));
   if (duplicateTiles.length > 0) {
     await tiles.insertMany(duplicateTiles);
@@ -631,20 +671,30 @@ export async function duplicateConfig(sourceConfigId: string, createdBy: string)
   return created;
 }
 
+type TileLayoutPatch = Pick<TileRecord, "Tile_ID" | "Start_Week" | "Workstream"> & {
+  Notes?: string;
+  Span_Weeks?: number;
+  Title?: string;
+  Description?: string;
+  Attendees?: string;
+  Agenda?: string;
+  Resources?: string;
+  Desired_Outcomes?: string;
+  activityLed?: TileRecord["activityLed"];
+  /** Mongo **Level_Of_Effort** (accepts `levelOfEffort` alias). */
+  Level_Of_Effort?: string;
+  levelOfEffort?: string;
+};
+
+function levelOfEffortFromTilePatch(update: TileLayoutPatch): string | undefined {
+  if (update.Level_Of_Effort !== undefined) return update.Level_Of_Effort;
+  if (update.levelOfEffort !== undefined) return update.levelOfEffort;
+  return undefined;
+}
+
 export async function patchTilesLayout(
   configId: string,
-  updates: Array<
-    Pick<TileRecord, "Tile_ID" | "Start_Week" | "Workstream"> & {
-      Notes?: string;
-      Span_Weeks?: number;
-      Title?: string;
-      Description?: string;
-      Attendees?: string;
-      Agenda?: string;
-      Resources?: string;
-      Desired_Outcomes?: string;
-    }
-  >,
+  updates: Array<TileLayoutPatch>,
 ): Promise<void> {
   if (!updates.length) return;
   const { tiles } = await getMongoCollections();
@@ -666,6 +716,9 @@ export async function patchTilesLayout(
       if (update.Attendees !== undefined) set.Attendees = update.Attendees;
       if (update.Resources !== undefined) set.Resources = update.Resources;
       if (update.Desired_Outcomes !== undefined) set.Desired_Outcomes = update.Desired_Outcomes;
+      if (update.activityLed !== undefined) set.Activity_Led = update.activityLed;
+      const levelOfEffort = levelOfEffortFromTilePatch(update);
+      if (levelOfEffort !== undefined) set.Level_Of_Effort = levelOfEffort;
 
       await tiles.updateOne(
         { Config_ID: configId, $or: [{ ID: rowId }, { Title_ID: slug }] },
@@ -690,7 +743,12 @@ export async function createTileRow(
     | "Notes"
     | "Description"
   > &
-    Partial<Pick<TileRecord, "Attendees" | "Agenda" | "Resources" | "Desired_Outcomes">>,
+    Partial<
+      Pick<
+        TileRecord,
+        "Attendees" | "Agenda" | "Resources" | "Desired_Outcomes" | "activityLed" | "Level_Of_Effort"
+      >
+    >,
 ): Promise<void> {
   const { tiles } = await getMongoCollections();
   const slug = String(tile.Tile_ID ?? "").trim();
@@ -712,6 +770,10 @@ export async function createTileRow(
     Agenda: tile.Agenda ?? "",
     Resources: tile.Resources ?? "",
     Desired_Outcomes: tile.Desired_Outcomes ?? "",
+    Level_Of_Effort: tile.Level_Of_Effort ?? "",
+    ...(tile.Category === "customer_activity"
+      ? { Activity_Led: parseCustomerActivityLed(tile.activityLed) }
+      : {}),
   });
 }
 
@@ -751,6 +813,8 @@ export async function replaceTilesForConfigSeed(input: {
       Agenda: "",
       Resources: "",
       Desired_Outcomes: "",
+      Level_Of_Effort: "",
+      ...(tile.Category === "customer_activity" ? { Activity_Led: "customer" } : {}),
     };
   });
 
@@ -784,6 +848,8 @@ export async function patchConfig(
       | "brazeCoreWorkstreamOrder"
       | "timelineAnnotation"
       | "timelineDates"
+      | "handsOnKeyboardSupport"
+      | "partnerName"
     >
   >,
 ): Promise<void> {
@@ -828,6 +894,21 @@ export async function patchConfig(
   }
   if (updates.timelineDates !== undefined) {
     set.Timeline_Dates = serializeTimelineDates(updates.timelineDates);
+  }
+  if (updates.handsOnKeyboardSupport !== undefined) {
+    set.Hands_On_Keyboard_Support = Boolean(updates.handsOnKeyboardSupport);
+    if (!updates.handsOnKeyboardSupport) {
+      set.Partner_Name = "";
+    }
+  }
+  if (updates.partnerName !== undefined) {
+    const enabled =
+      updates.handsOnKeyboardSupport !== undefined
+        ? Boolean(updates.handsOnKeyboardSupport)
+        : undefined;
+    if (enabled !== false) {
+      set.Partner_Name = String(updates.partnerName).trim();
+    }
   }
   if (updates.logoDisplayHeightPx !== undefined) {
     set.logo_display_height_px =

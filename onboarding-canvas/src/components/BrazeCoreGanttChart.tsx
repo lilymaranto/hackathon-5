@@ -21,12 +21,14 @@ import {
   parseHexColorOptional,
   resolveTileCategoryColorsFromConfig,
   textColorOnTileBackground,
+  PARTNER_LED_WHITE_OUTLINE_WIDTH_PX,
   type ResolvedTileCategoryColors,
 } from "@/lib/tile-category-colors";
 import {
   labelHexForWorkstreamTextType,
   workstreamLabelTextTypeFromRailHex,
 } from "@/lib/braze-workstream-order";
+import { parseCustomerActivityLed } from "@/lib/customer-activity-led";
 import type { ConfigRecord, PlanOptionId, TileRecord, Workstream, WorkstreamLabelTextType } from "@/lib/types";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
@@ -168,6 +170,10 @@ export type BrazeCoreGanttChartProps = {
    * Falls back to “Prospect” when empty.
    */
   legendProspectLabel?: string;
+  /** When true, Braze Core Gantt shows partner-led key + outline bars (Hands On Keyboard Support). */
+  handsOnKeyboardSupport?: boolean;
+  /** Partner name for Gantt key label; falls back to “Partner”. */
+  legendPartnerLabel?: string;
   /** Braze Core: saved label contrast per workstream (`b` / `w`); collapsed + expanded left rails. */
   workstreamLabelTextTypeById?: ReadonlyMap<Workstream, WorkstreamLabelTextType>;
   /** Braze Core: double-click workstream title in collapsed row to flip `b`/`w` and persist (parent PATCH). */
@@ -466,6 +472,17 @@ function GanttRowTimelineRailStatic({
   );
 }
 
+function isBrazePartnerLedCustomerActivity(
+  tile: TileRecord,
+  matchAiDecisioningSwimlaneBars: boolean,
+): boolean {
+  return (
+    !matchAiDecisioningSwimlaneBars &&
+    tile.Category === "customer_activity" &&
+    parseCustomerActivityLed(tile.activityLed) === "partner"
+  );
+}
+
 function GanttRowTimelineRailDroppable({
   workstream,
   minHeight,
@@ -639,6 +656,26 @@ function GanttTaskBarDraggable({
   }
 
   if (cat === "customer_activity") {
+    if (isBrazePartnerLedCustomerActivity(tile, !!matchAiDecisioningSwimlaneBars)) {
+      return (
+        <button
+          ref={setNodeRef}
+          type="button"
+          aria-label={tile.Title}
+          title={tile.Title}
+          className={clsx(common, "border-solid bg-white", grabClass, draggingClass)}
+          style={{
+            ...posStyle,
+            borderWidth: PARTNER_LED_WHITE_OUTLINE_WIDTH_PX,
+            borderColor: workstreamHue,
+            color: workstreamHue,
+          }}
+          onClick={onOpen}
+          {...listeners}
+          {...attributes}
+        />
+      );
+    }
     const fill = activityLaneFill;
     const fg = textColorOnTileBackground(fill);
     return (
@@ -807,6 +844,23 @@ function GanttTaskBarStatic({
   }
 
   if (cat === "customer_activity") {
+    if (isBrazePartnerLedCustomerActivity(tile, !!matchAiDecisioningSwimlaneBars)) {
+      return (
+        <button
+          type="button"
+          aria-label={tile.Title}
+          title={tile.Title}
+          className={clsx(common, "border-solid bg-white")}
+          style={{
+            ...posStyle,
+            borderWidth: PARTNER_LED_WHITE_OUTLINE_WIDTH_PX,
+            borderColor: workstreamHue,
+            color: workstreamHue,
+          }}
+          onClick={onOpen}
+        />
+      );
+    }
     const fill = activityLaneFill;
     const fg = textColorOnTileBackground(fill);
     return (
@@ -1059,6 +1113,8 @@ export function BrazeCoreGanttChart({
   aiDecisioningCategoryColors,
   workstreamLaneColorOverrides,
   legendProspectLabel,
+  handsOnKeyboardSupport = false,
+  legendPartnerLabel,
   workstreamLabelTextTypeById,
   onWorkstreamLabelTextDoubleClick,
   onAppendTimelineAnnotationAtColumn,
@@ -1086,6 +1142,8 @@ export function BrazeCoreGanttChart({
 
   const prospectKeyName = (legendProspectLabel ?? "").trim() || "Prospect";
   const prospectActivityKeyLabel = `${prospectKeyName} Activity`;
+  const partnerKeyName = (legendPartnerLabel ?? "").trim() || "Partner";
+  const partnerActivityKeyLabel = `${partnerKeyName} Activity`;
   const adsTileCategoryColorsResolved = useMemo(
     () => resolveTileCategoryColorsFromConfig(aiDecisioningCategoryColors ?? {}),
     [
@@ -1111,8 +1169,10 @@ export function BrazeCoreGanttChart({
   const aiGanttMilestoneLegendHue = categoryMilestoneFill ?? ADS_GANTT_MILESTONE_ACCENT;
 
   const visibleGanttTiles = useMemo(() => {
-    let list = showOnboardingSessions
-      ? tiles
+    let list = matchAiDecisioningSwimlaneBars
+      ? showOnboardingSessions
+        ? tiles
+        : tiles.filter((tile) => tile.Category !== "onboarding_session")
       : tiles.filter((tile) => tile.Category !== "onboarding_session");
     if (matchAiDecisioningSwimlaneBars) {
       list = list.filter((t) => !ADS_GANTT_OMIT_TILE_IDS.has(t.Tile_ID));
@@ -1269,14 +1329,16 @@ export function BrazeCoreGanttChart({
                 />
                 <span className="font-medium text-[#2c1650]">{prospectActivityKeyLabel}</span>
               </span>
-              <span className="inline-flex items-center gap-2">
-                <span
-                  className="inline-block h-6 w-10 shrink-0 rounded border-2 bg-white shadow-sm ring-1 ring-black/5"
-                  style={{ borderColor: brazeGanttKeyWorkstreamAccentHex }}
-                  aria-hidden
-                />
-                <span className="font-medium text-[#2c1650]">Onboarding Session</span>
-              </span>
+              {handsOnKeyboardSupport ? (
+                <span className="inline-flex items-center gap-2">
+                  <span
+                    className="inline-block h-6 w-10 shrink-0 rounded border-2 bg-white shadow-sm ring-1 ring-black/5"
+                    style={{ borderColor: brazeGanttKeyWorkstreamAccentHex }}
+                    aria-hidden
+                  />
+                  <span className="font-medium text-[#2c1650]">{partnerActivityKeyLabel}</span>
+                </span>
+              ) : null}
               <span className="inline-flex items-center gap-2">
                 <span
                   className="inline-flex h-6 w-10 items-center justify-center rounded border-2 border-white bg-white shadow-sm ring-1 ring-black/5"

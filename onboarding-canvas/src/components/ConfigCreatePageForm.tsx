@@ -45,6 +45,8 @@ export function ConfigCreatePageForm() {
   const [timelineStartDate, setTimelineStartDate] = useState("");
   const [logoDataUrl, setLogoDataUrl] = useState("");
   const [logoFileName, setLogoFileName] = useState("");
+  const [handsOnKeyboardSupport, setHandsOnKeyboardSupport] = useState(false);
+  const [partnerName, setPartnerName] = useState("");
 
   const canSubmit = title.trim() && industry && productType;
   const isAiDecisioningStudio = productType === "AI Decisioning Studio";
@@ -121,6 +123,9 @@ export function ConfigCreatePageForm() {
           : {}),
         ...(logoDataUrl.trim() ? { logoDataUrl: logoDataUrl.trim() } : {}),
         ...(timelineStartDate.trim() ? { timelineStartDate: timelineStartDate.trim() } : {}),
+        ...(handsOnKeyboardSupport
+          ? { handsOnKeyboardSupport: true, partnerName: partnerName.trim() }
+          : {}),
       }),
     });
 
@@ -249,6 +254,13 @@ export function ConfigCreatePageForm() {
           brandExtractScope={BRAND_EXTRACT_CREATE_SCOPE}
           timelineStartDate={timelineStartDate}
           onTimelineStartDateChange={setTimelineStartDate}
+          handsOnKeyboardSupport={handsOnKeyboardSupport}
+          partnerName={partnerName}
+          onHandsOnKeyboardSupportChange={(value) => {
+            setHandsOnKeyboardSupport(value);
+            if (!value) setPartnerName("");
+          }}
+          onPartnerNameChange={setPartnerName}
           logoDataUrl={logoDataUrl}
           logoFileName={logoFileName}
           disabled={isSaving}

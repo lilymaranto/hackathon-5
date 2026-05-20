@@ -5,6 +5,9 @@ export type TileCategory =
   | "customer_activity"
   | "milestone";
 
+/** Customer activity drawer: who leads the session (Mongo **Activity_Led**). */
+export type CustomerActivityLed = "customer" | "partner";
+
 export type Workstream =
   | "governance"
   | "data"
@@ -107,6 +110,10 @@ export type ConfigRecord = {
    */
   timelineDates?: string[];
   channels: ChannelPreferences;
+  /** When true, onboarding includes hands-on keyboard support (Mongo **Hands_On_Keyboard_Support**). */
+  handsOnKeyboardSupport?: boolean;
+  /** Optional partner name when {@link handsOnKeyboardSupport} is enabled (Mongo **Partner_Name**). */
+  partnerName?: string;
 };
 
 export type TileRecord = {
@@ -135,6 +142,13 @@ export type TileRecord = {
   Resources?: string;
   /** Tiles sheet **Desired_Outcomes** (multiline / bullets). When empty, drawer uses library outcomes. */
   Desired_Outcomes?: string;
+  /**
+   * Customer activity tiles when Hands On Keyboard Support is enabled.
+   * Mongo **Activity_Led** (`customer` default, `partner` when partner-led).
+   */
+  activityLed?: CustomerActivityLed;
+  /** Customer activity tiles: effort estimate (Mongo **Level_Of_Effort**). */
+  Level_Of_Effort?: string;
   /** Tiles sheet **ID** column (`{Config_ID}__{Tile_ID slug}`) for PATCH/DELETE/`?id=`. */
   CaboodlePatchKey?: string;
 };

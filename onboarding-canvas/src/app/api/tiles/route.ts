@@ -35,6 +35,8 @@ export async function PATCH(request: NextRequest) {
         Agenda?: string;
         Resources?: string;
         Desired_Outcomes?: string;
+        activityLed?: TileRecord["activityLed"];
+        Level_Of_Effort?: string;
       }>;
     };
 
@@ -75,7 +77,12 @@ export async function POST(request: NextRequest) {
         | "Notes"
         | "Description"
       > &
-        Partial<Pick<TileRecord, "Attendees" | "Agenda" | "Resources" | "Desired_Outcomes">>;
+        Partial<
+          Pick<
+            TileRecord,
+            "Attendees" | "Agenda" | "Resources" | "Desired_Outcomes" | "activityLed" | "Level_Of_Effort"
+          >
+        >;
     };
 
     const configId = body.configId?.trim();

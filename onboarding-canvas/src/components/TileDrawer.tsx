@@ -22,11 +22,24 @@ import {
   BRAZE_RESOURCES_CHART_SECTION_ID,
   brazeResourceRowDomIdForAttendeeLine,
 } from "@/lib/braze-core-resources-data";
-import { ConfigRecord, TileCategory, TileLibraryEntry, TileLibraryLink, TileRecord, type PlanOptionId } from "@/lib/types";
+import {
+  customerActivityLedLabels,
+  drawerCategoryBadgeLabel,
+  parseCustomerActivityLed,
+} from "@/lib/customer-activity-led";
+import {
+  ConfigRecord,
+  CustomerActivityLed,
+  TileLibraryEntry,
+  TileLibraryLink,
+  TileRecord,
+  type PlanOptionId,
+} from "@/lib/types";
 import {
   BookOpen,
   Calendar,
   Check,
+  Clock,
   ListChecks,
   NotepadText,
   PartyPopper,
@@ -76,16 +89,12 @@ type Props = {
   onDrawerAttendeesCommit: (value: string) => void;
   onDrawerResourcesCommit: (value: string) => void;
   onDrawerDesiredOutcomesCommit: (value: string) => void;
+  onDrawerLevelOfEffortCommit: (value: string) => void;
+  onDrawerActivityLedCommit: (value: CustomerActivityLed) => void;
   /** Braze Core: all tiles; AI Decisioning: custom tiles only. Opens confirmation in parent. */
   showDeleteTile?: boolean;
   onDeleteTilePress?: () => void;
   deleteTilePending?: boolean;
-};
-
-const CATEGORY_LABEL: Record<TileCategory, string> = {
-  onboarding_session: "Onboarding Session",
-  customer_activity: "Customer Activity",
-  milestone: "Milestone",
 };
 
 function ResourceLine({ item }: { item: TileLibraryLink }) {
@@ -402,6 +411,102 @@ function EditableDescriptionSection({
   );
 }
 
+function EditableLevelOfEffortSection({
+  sheetText,
+  readOnly,
+  aiDecisioningTypography,
+  onCommit,
+  editorKey,
+}: {
+  sheetText: string;
+  readOnly?: boolean;
+  aiDecisioningTypography?: boolean;
+  onCommit: (value: string) => void;
+  editorKey: string;
+}) {
+  const displayText = sheetText.trim();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(displayText);
+
+  useEffect(() => {
+    setEditing(false);
+  }, [editorKey]);
+
+  useEffect(() => {
+    if (!editing) setDraft(displayText);
+  }, [displayText, editing]);
+
+  const bodyText = aiDecisioningTypography ? "text-[15px]" : "text-sm";
+  const sectionTitle = aiDecisioningTypography ? "text-[17px]" : "text-base";
+
+  const startEdit = () => {
+    if (readOnly) return;
+    setDraft(displayText);
+    setEditing(true);
+  };
+
+  const body = editing ? (
+    <textarea
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      autoFocus
+      rows={3}
+      aria-label="Edit level of effort"
+      placeholder="e.g. 2 hours, half day…"
+      className={clsx(
+        "w-full resize-y rounded-lg border border-[#d4c9f6] bg-white px-3 py-2.5 text-[#2F2354] shadow-inner outline-none focus:border-[#8b30e7]",
+        bodyText,
+        "min-h-[4rem] placeholder:text-[#b8aed4]",
+      )}
+      onBlur={() => {
+        onCommit(draft);
+        setEditing(false);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          setDraft(displayText);
+          setEditing(false);
+        }
+      }}
+    />
+  ) : displayText ? (
+    <p
+      className={clsx(
+        "cursor-text rounded-sm leading-relaxed outline-offset-2 hover:bg-[#f6efff]/70",
+        bodyText,
+      )}
+      onDoubleClick={startEdit}
+      title="Double-click to edit level of effort"
+    >
+      {displayText}
+    </p>
+  ) : (
+    <div className="cursor-text rounded-sm hover:bg-[#f6efff]/70" onDoubleClick={startEdit}>
+      <EmptyBulletPlaceholder className={bodyText} />
+    </div>
+  );
+
+  return (
+    <IconSection
+      icon={Clock}
+      title="Level of Effort"
+      titleClassName={sectionTitle}
+      titleOnDoubleClick={readOnly ? undefined : startEdit}
+      titleDoubleClickHint={readOnly ? undefined : "Double-click to edit level of effort"}
+    >
+      {readOnly ? (
+        displayText ? (
+          <p className={clsx("leading-relaxed", bodyText)}>{displayText}</p>
+        ) : (
+          <EmptyBulletPlaceholder className={bodyText} />
+        )
+      ) : (
+        body
+      )}
+    </IconSection>
+  );
+}
+
 function EditableBulletListSection({
   icon: Icon,
   title,
@@ -648,6 +753,12 @@ function TileNotesSection({
   showDeleteTile,
   onDeleteTilePress,
   deleteTilePending,
+  showActivityLedToggle,
+  activityLed,
+  activityLedCustomerLabel,
+  activityLedPartnerLabel,
+  onActivityLedChange,
+  activityLedReadOnly,
 }: {
   notesValue: string;
   onNotesCommit: (value: string) => void;
@@ -660,6 +771,12 @@ function TileNotesSection({
   showDeleteTile?: boolean;
   onDeleteTilePress?: () => void;
   deleteTilePending?: boolean;
+  showActivityLedToggle?: boolean;
+  activityLed?: CustomerActivityLed;
+  activityLedCustomerLabel?: string;
+  activityLedPartnerLabel?: string;
+  onActivityLedChange?: (value: CustomerActivityLed) => void;
+  activityLedReadOnly?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(notesValue);
@@ -767,7 +884,24 @@ function TileNotesSection({
           </div>
         )}
         {!readOnly ? (
-          <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+            {showActivityLedToggle &&
+            activityLed &&
+            activityLedCustomerLabel &&
+            activityLedPartnerLabel &&
+            onActivityLedChange ? (
+              <CustomerActivityLedToggle
+                compact
+                value={activityLed}
+                customerLabel={activityLedCustomerLabel}
+                partnerLabel={activityLedPartnerLabel}
+                readOnly={activityLedReadOnly}
+                onChange={onActivityLedChange}
+              />
+            ) : (
+              <span className="min-w-0 shrink" aria-hidden />
+            )}
+            <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
             {showDeleteTile && onDeleteTilePress ? (
               <button
                 type="button"
@@ -803,6 +937,7 @@ function TileNotesSection({
                 "Save"
               )}
             </button>
+            </div>
           </div>
         ) : null}
       </div>
@@ -952,6 +1087,68 @@ function MilestoneDrawerBody({
   );
 }
 
+function CustomerActivityLedToggle({
+  value,
+  customerLabel,
+  partnerLabel,
+  readOnly,
+  onChange,
+  compact = false,
+}: {
+  value: CustomerActivityLed;
+  customerLabel: string;
+  partnerLabel: string;
+  readOnly?: boolean;
+  onChange: (value: CustomerActivityLed) => void;
+  compact?: boolean;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label={`${customerLabel} or ${partnerLabel}`}
+      className={compact ? "shrink-0" : "mt-8 border-t border-[#E8E5F8] pt-6"}
+    >
+      <div
+        className={clsx(
+          "inline-flex rounded-md border border-[#d4c9f6] bg-[#faf8ff] p-0.5",
+          compact ? "h-9 max-w-[min(100%,18rem)]" : "w-full",
+        )}
+      >
+        <button
+          type="button"
+          disabled={readOnly}
+          onClick={() => onChange("customer")}
+          className={clsx(
+            "flex items-center justify-center rounded font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--tile-drawer-primary)]",
+            compact ? "h-full px-2.5 text-[11px]" : "flex-1 px-3 py-2.5 text-xs",
+            value === "customer"
+              ? "bg-[var(--tile-drawer-primary)] text-white shadow-sm hover:bg-[var(--tile-drawer-primary-hover)]"
+              : "text-[#4a2b7a] hover:bg-[#efe6ff]",
+            readOnly && "cursor-not-allowed opacity-60",
+          )}
+        >
+          {customerLabel}
+        </button>
+        <button
+          type="button"
+          disabled={readOnly}
+          onClick={() => onChange("partner")}
+          className={clsx(
+            "flex items-center justify-center rounded font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--tile-drawer-primary)]",
+            compact ? "h-full px-2.5 text-[11px]" : "flex-1 px-3 py-2.5 text-xs",
+            value === "partner"
+              ? "bg-[var(--tile-drawer-primary)] text-white shadow-sm hover:bg-[var(--tile-drawer-primary-hover)]"
+              : "text-[#4a2b7a] hover:bg-[#efe6ff]",
+            readOnly && "cursor-not-allowed opacity-60",
+          )}
+        >
+          {partnerLabel}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function StandardDrawerBody({
   tile,
   library,
@@ -965,6 +1162,7 @@ function StandardDrawerBody({
   onAttendeesCommit,
   onResourcesCommit,
   onDesiredOutcomesCommit,
+  onLevelOfEffortCommit,
   editorKey,
 }: {
   tile: TileRecord;
@@ -979,6 +1177,7 @@ function StandardDrawerBody({
   onAttendeesCommit: (value: string) => void;
   onResourcesCommit: (value: string) => void;
   onDesiredOutcomesCommit: (value: string) => void;
+  onLevelOfEffortCommit: (value: string) => void;
   editorKey: string;
 }) {
   return (
@@ -992,16 +1191,18 @@ function StandardDrawerBody({
         editorKey={editorKey}
       />
 
-      <EditableBulletListSection
-        icon={Calendar}
-        title="Agenda"
-        libraryLines={library.agenda}
-        sheetText={tile.Agenda}
-        onCommit={onAgendaCommit}
-        readOnly={readOnly}
-        editorKey={editorKey}
-        aiDecisioningTypography={aiDecisioningTypography}
-      />
+      {tile.Category !== "customer_activity" ? (
+        <EditableBulletListSection
+          icon={Calendar}
+          title="Agenda"
+          libraryLines={library.agenda}
+          sheetText={tile.Agenda}
+          onCommit={onAgendaCommit}
+          readOnly={readOnly}
+          editorKey={editorKey}
+          aiDecisioningTypography={aiDecisioningTypography}
+        />
+      ) : null}
 
       {showAdsDecisioningAttendees ? (
         <IconSection
@@ -1046,6 +1247,17 @@ function StandardDrawerBody({
         editorKey={editorKey}
         aiDecisioningTypography={aiDecisioningTypography}
       />
+
+      {tile.Category === "customer_activity" ? (
+        <EditableLevelOfEffortSection
+          sheetText={tile.Level_Of_Effort ?? ""}
+          readOnly={readOnly}
+          aiDecisioningTypography={aiDecisioningTypography}
+          onCommit={onLevelOfEffortCommit}
+          editorKey={editorKey}
+        />
+      ) : null}
+
     </div>
   );
 }
@@ -1070,6 +1282,8 @@ export function TileDrawer({
   onDrawerAttendeesCommit,
   onDrawerResourcesCommit,
   onDrawerDesiredOutcomesCommit,
+  onDrawerLevelOfEffortCommit,
+  onDrawerActivityLedCommit,
   showDeleteTile,
   onDeleteTilePress,
   deleteTilePending,
@@ -1087,6 +1301,19 @@ export function TileDrawer({
     tile.Tile_ID.startsWith("ads_");
 
   const aiDecisioningTypography = config.Product_Type === "AI Decisioning Studio";
+
+  const activityLedLabels = useMemo(() => customerActivityLedLabels(config), [config]);
+
+  const showCustomerActivityLedToggle =
+    !!tile &&
+    tile.Category === "customer_activity" &&
+    Boolean(config.handsOnKeyboardSupport);
+
+  const drawerActivityLed = tile ? parseCustomerActivityLed(tile.activityLed) : "customer";
+
+  const categoryBadgeLabel = tile
+    ? drawerCategoryBadgeLabel(tile.Category, config, drawerActivityLed)
+    : "";
 
   const drawerAccentStyle = useMemo((): CSSProperties => {
     const primary = parseHexColorOptional(config.buttonColor) ?? DEFAULT_TOOLBAR_BUTTON_HEX;
@@ -1144,7 +1371,7 @@ export function TileDrawer({
                   aiDecisioningTypography ? "text-sm" : "text-xs",
                 )}
               >
-                {CATEGORY_LABEL[tile.Category]}
+                {categoryBadgeLabel}
               </span>
             ) : null}
           </div>
@@ -1152,12 +1379,11 @@ export function TileDrawer({
             type="button"
             onClick={onClose}
             className={clsx(
-              "flex shrink-0 items-center gap-2 rounded-lg bg-[var(--tile-drawer-primary)] px-4 py-2.5 font-semibold text-white shadow-md hover:bg-[var(--tile-drawer-primary-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--tile-drawer-primary)]",
-              aiDecisioningTypography ? "text-base" : "text-sm",
+              "flex shrink-0 items-center gap-1 rounded-md bg-[var(--tile-drawer-primary)] px-2.5 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-[var(--tile-drawer-primary-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--tile-drawer-primary)]",
             )}
             aria-label="Close"
           >
-            <X size={18} strokeWidth={2.5} aria-hidden />
+            <X size={14} strokeWidth={2.5} aria-hidden />
             Close
           </button>
         </header>
@@ -1191,6 +1417,7 @@ export function TileDrawer({
                 onAttendeesCommit={onDrawerAttendeesCommit}
                 onResourcesCommit={onDrawerResourcesCommit}
                 onDesiredOutcomesCommit={onDrawerDesiredOutcomesCommit}
+                onLevelOfEffortCommit={onDrawerLevelOfEffortCommit}
                 editorKey={notesEditorKey}
               />
             ))}
@@ -1207,6 +1434,12 @@ export function TileDrawer({
               showDeleteTile={showDeleteTile}
               onDeleteTilePress={onDeleteTilePress}
               deleteTilePending={deleteTilePending}
+              showActivityLedToggle={showCustomerActivityLedToggle}
+              activityLed={drawerActivityLed}
+              activityLedCustomerLabel={activityLedLabels.customer}
+              activityLedPartnerLabel={activityLedLabels.partner}
+              onActivityLedChange={onDrawerActivityLedCommit}
+              activityLedReadOnly={lockTileCopy}
             />
           ) : null}
         </div>

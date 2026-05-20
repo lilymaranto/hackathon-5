@@ -13,6 +13,7 @@ import { EditableTimelinePeriodLabel } from "@/components/EditableTimelinePeriod
 import { ConfigTileCategoryColorPickers } from "@/components/ConfigTileCategoryColorPickers";
 import { ConfigWorkstreamGradientColorPickers } from "@/components/ConfigWorkstreamGradientColorPickers";
 import { TileDrawer } from "@/components/TileDrawer";
+import { parseCustomerActivityLed } from "@/lib/customer-activity-led";
 import {
   TimelineAnnotationsShell,
   appendTimelineAnnotationAtColumn,
@@ -78,7 +79,15 @@ import {
   timelineStartDateFromDates,
   usesWeeklyTimelineDates,
 } from "@/lib/timeline-dates";
-import { ConfigRecord, PlanOptionId, TileCategory, TileRecord, Workstream, type BrazeWorkstreamOrderEntry } from "@/lib/types";
+import {
+  ConfigRecord,
+  CustomerActivityLed,
+  PlanOptionId,
+  TileCategory,
+  TileRecord,
+  Workstream,
+  type BrazeWorkstreamOrderEntry,
+} from "@/lib/types";
 import {
   closestCorners,
   DndContext,
@@ -522,7 +531,11 @@ function DraggableTile({
     disabled: readOnly,
   });
 
-  const categorySurface = brazeSwimlaneTileCategoryStyle(tileCategoryColors, tile.Category);
+  const categorySurface = brazeSwimlaneTileCategoryStyle(
+    tileCategoryColors,
+    tile.Category,
+    tile.activityLed,
+  );
   const milestone = tile.Category === "milestone";
   const resolvedLineClamp = lineClamp ?? (normalizedRowSpan(tile.Row_Span) >= 2 ? 4 : 2);
 
@@ -593,7 +606,11 @@ function StaticTile({
   milestoneAccent: string;
   lineClamp?: 2 | 3 | 4;
 }) {
-  const categorySurface = brazeSwimlaneTileCategoryStyle(tileCategoryColors, tile.Category);
+  const categorySurface = brazeSwimlaneTileCategoryStyle(
+    tileCategoryColors,
+    tile.Category,
+    tile.activityLed,
+  );
   const milestone = tile.Category === "milestone";
   const resolvedLineClamp = lineClamp ?? (normalizedRowSpan(tile.Row_Span) >= 2 ? 4 : 2);
 
@@ -1217,6 +1234,12 @@ export function CanvasBoard({
   const [pendingDesiredOutcomesByUid, setPendingDesiredOutcomesByUid] = useState<Record<string, string>>(
     {},
   );
+  const [pendingActivityLedByUid, setPendingActivityLedByUid] = useState<
+    Record<string, CustomerActivityLed>
+  >({});
+  const [pendingLevelOfEffortByUid, setPendingLevelOfEffortByUid] = useState<Record<string, string>>(
+    {},
+  );
   /** In-app navigation target when user follows a link with unsaved layout changes. */
   const [leaveIntentHref, setLeaveIntentHref] = useState<string | null>(null);
   const [notesOkayPending, setNotesOkayPending] = useState(false);
@@ -1230,7 +1253,6 @@ export function CanvasBoard({
   /** Braze Core only: switch swimlane timeline vs Gantt (placeholder until Gantt is implemented). */
   const [brazeCoreView, setBrazeCoreView] = useState<"swimlane" | "gantt">("swimlane");
   /** Gantt-only filter: default unchecked so the first Gantt view shows customer activities/milestones. */
-  const [showOnboardingSessionsInGantt, setShowOnboardingSessionsInGantt] = useState(false);
   /** AI Decisioning Studio: swimlane vs Gantt (Gantt defaults to customer activities only until checkbox). */
   const [adsCanvasView, setAdsCanvasView] = useState<"swimlane" | "gantt">("swimlane");
   const [showAdsOnboardingSessionsInGantt, setShowAdsOnboardingSessionsInGantt] = useState(false);
@@ -1265,6 +1287,10 @@ export function CanvasBoard({
   );
   const [draftLogoDataUrl, setDraftLogoDataUrl] = useState(config.logoDataUrl ?? "");
   const [draftLogoFileName, setDraftLogoFileName] = useState("");
+  const [draftHandsOnKeyboardSupport, setDraftHandsOnKeyboardSupport] = useState(
+    Boolean(config.handsOnKeyboardSupport),
+  );
+  const [draftPartnerName, setDraftPartnerName] = useState(config.partnerName ?? "");
   const [toolbarLogoHeightPx, setToolbarLogoHeightPx] = useState(
     clampConfigLogoHeightPx(config.logoDisplayHeightPx ?? MAX_CONFIG_LOGO_HEIGHT_PX),
   );
@@ -1439,6 +1465,8 @@ export function CanvasBoard({
     setDraftButtonColor(config.buttonColor ?? "");
     setDraftWorkstreamGradientTopColor(config.workstreamGradientTopColor ?? "");
     setDraftWorkstreamGradientBottomColor(config.workstreamGradientBottomColor ?? "");
+    setDraftHandsOnKeyboardSupport(Boolean(config.handsOnKeyboardSupport));
+    setDraftPartnerName(config.partnerName ?? "");
   }, [
     config.chosenTitle,
     config.logoDataUrl,
@@ -1449,6 +1477,8 @@ export function CanvasBoard({
     config.workstreamGradientTopColor,
     config.workstreamGradientBottomColor,
     config.timelineDates,
+    config.handsOnKeyboardSupport,
+    config.partnerName,
   ]);
 
   const timelineAnnotationsEditable =
@@ -1676,6 +1706,14 @@ export function CanvasBoard({
     () => new Map(tiles.map((t) => [tileStableKey(t), t.Desired_Outcomes ?? ""])),
     [tiles],
   );
+  const serverActivityLedByUid = useMemo(
+    () => new Map(tiles.map((t) => [tileStableKey(t), parseCustomerActivityLed(t.activityLed)])),
+    [tiles],
+  );
+  const serverLevelOfEffortByUid = useMemo(
+    () => new Map(tiles.map((t) => [tileStableKey(t), t.Level_Of_Effort ?? ""])),
+    [tiles],
+  );
 
   const tileState = useMemo(
     () =>
@@ -1702,9 +1740,26 @@ export function CanvasBoard({
         if (Object.prototype.hasOwnProperty.call(pendingDesiredOutcomesByUid, k)) {
           out = { ...out, Desired_Outcomes: pendingDesiredOutcomesByUid[k]! };
         }
+        if (Object.prototype.hasOwnProperty.call(pendingActivityLedByUid, k)) {
+          out = { ...out, activityLed: pendingActivityLedByUid[k]! };
+        }
+        if (Object.prototype.hasOwnProperty.call(pendingLevelOfEffortByUid, k)) {
+          out = { ...out, Level_Of_Effort: pendingLevelOfEffortByUid[k]! };
+        }
         return out;
       }),
-    [tiles, editsByUid, pendingTitleByUid, pendingDescriptionByUid, pendingAgendaByUid, pendingAttendeesByUid, pendingResourcesByUid, pendingDesiredOutcomesByUid],
+    [
+      tiles,
+      editsByUid,
+      pendingTitleByUid,
+      pendingDescriptionByUid,
+      pendingAgendaByUid,
+      pendingAttendeesByUid,
+      pendingResourcesByUid,
+      pendingDesiredOutcomesByUid,
+      pendingActivityLedByUid,
+      pendingLevelOfEffortByUid,
+    ],
   );
 
   const drawerTile = useMemo(() => {
@@ -1738,6 +1793,19 @@ export function CanvasBoard({
     if ((drawerTile.Attendees ?? "") !== (st.Attendees ?? "")) return true;
     if ((drawerTile.Resources ?? "") !== (st.Resources ?? "")) return true;
     if ((drawerTile.Desired_Outcomes ?? "") !== (st.Desired_Outcomes ?? "")) return true;
+    if (
+      drawerTile.Category === "customer_activity" &&
+      (drawerTile.Level_Of_Effort ?? "") !== (st.Level_Of_Effort ?? "")
+    ) {
+      return true;
+    }
+    if (
+      drawerTile.Category === "customer_activity" &&
+      config.handsOnKeyboardSupport &&
+      parseCustomerActivityLed(drawerTile.activityLed) !== parseCustomerActivityLed(st.activityLed)
+    ) {
+      return true;
+    }
     return false;
   }, [
     allowLayoutAndDrawerEdits,
@@ -1746,6 +1814,7 @@ export function CanvasBoard({
     tiles,
     pendingNotesByUid,
     serverNotesByUid,
+    config.handsOnKeyboardSupport,
   ]);
 
   const showDrawerDeleteButton = useMemo(
@@ -2134,6 +2203,19 @@ export function CanvasBoard({
       if ((eff.Attendees ?? "") !== (serverAttendeesByUid.get(k) ?? "")) set.add(k);
       if ((eff.Resources ?? "") !== (serverResourcesByUid.get(k) ?? "")) set.add(k);
       if ((eff.Desired_Outcomes ?? "") !== (serverDesiredOutcomesByUid.get(k) ?? "")) set.add(k);
+      if (
+        eff.Category === "customer_activity" &&
+        (eff.Level_Of_Effort ?? "") !== (serverLevelOfEffortByUid.get(k) ?? "")
+      ) {
+        set.add(k);
+      }
+      if (
+        eff.Category === "customer_activity" &&
+        config.handsOnKeyboardSupport &&
+        parseCustomerActivityLed(eff.activityLed) !== (serverActivityLedByUid.get(k) ?? "customer")
+      ) {
+        set.add(k);
+      }
     }
     return set;
   }, [
@@ -2141,12 +2223,15 @@ export function CanvasBoard({
     tiles,
     tileState,
     config.channels,
+    config.handsOnKeyboardSupport,
     serverTitleByUid,
     serverDescriptionByUid,
     serverAgendaByUid,
     serverAttendeesByUid,
     serverResourcesByUid,
     serverDesiredOutcomesByUid,
+    serverActivityLedByUid,
+    serverLevelOfEffortByUid,
   ]);
 
   const savePatchKeys = useMemo(() => {
@@ -2405,6 +2490,53 @@ export function CanvasBoard({
     },
     [readOnly, customerPasswordView, selectedTile, tiles, allowLayoutAndDrawerEdits],
   );
+
+  const handleDrawerLevelOfEffortCommit = useCallback(
+    (value: string) => {
+      if (!allowLayoutAndDrawerEdits || readOnly || customerPasswordView || !selectedTile) return;
+      if (selectedTile.Category !== "customer_activity") return;
+      const k = tileStableKey(selectedTile);
+      const serverLoe = tiles.find((t) => tileStableKey(t) === k)?.Level_Of_Effort ?? "";
+      const canonical = value.trim();
+      setPendingLevelOfEffortByUid((prev) => {
+        if (canonical === serverLoe) {
+          if (!Object.prototype.hasOwnProperty.call(prev, k)) return prev;
+          const next = { ...prev };
+          delete next[k];
+          return next;
+        }
+        return { ...prev, [k]: canonical };
+      });
+    },
+    [readOnly, customerPasswordView, selectedTile, tiles, allowLayoutAndDrawerEdits],
+  );
+
+  const handleDrawerActivityLedCommit = useCallback(
+    (value: CustomerActivityLed) => {
+      if (!allowLayoutAndDrawerEdits || readOnly || customerPasswordView || !selectedTile) return;
+      if (selectedTile.Category !== "customer_activity" || !config.handsOnKeyboardSupport) return;
+      const k = tileStableKey(selectedTile);
+      const serverLed = serverActivityLedByUid.get(k) ?? "customer";
+      setPendingActivityLedByUid((prev) => {
+        if (value === serverLed) {
+          if (!Object.prototype.hasOwnProperty.call(prev, k)) return prev;
+          const next = { ...prev };
+          delete next[k];
+          return next;
+        }
+        return { ...prev, [k]: value };
+      });
+    },
+    [
+      readOnly,
+      customerPasswordView,
+      selectedTile,
+      allowLayoutAndDrawerEdits,
+      config.handsOnKeyboardSupport,
+      serverActivityLedByUid,
+    ],
+  );
+
   const handleDrawerTitleCommit = useCallback(
     (title: string) => {
       if (readOnly || customerPasswordView || !selectedTile) return;
@@ -2456,6 +2588,12 @@ export function CanvasBoard({
     const attendees = drawerTile.Attendees ?? "";
     const resources = drawerTile.Resources ?? "";
     const desiredOutcomes = drawerTile.Desired_Outcomes ?? "";
+    const levelOfEffort =
+      drawerTile.Category === "customer_activity" ? (drawerTile.Level_Of_Effort ?? "") : undefined;
+    const activityLed =
+      drawerTile.Category === "customer_activity" && config.handsOnKeyboardSupport
+        ? parseCustomerActivityLed(drawerTile.activityLed)
+        : undefined;
 
     setNotesOkayPending(true);
     setSaveError(null);
@@ -2478,6 +2616,8 @@ export function CanvasBoard({
               Attendees: attendees,
               Resources: resources,
               Desired_Outcomes: desiredOutcomes,
+              ...(levelOfEffort !== undefined ? { Level_Of_Effort: levelOfEffort } : {}),
+              ...(activityLed !== undefined ? { activityLed } : {}),
             },
           ],
         }),
@@ -2518,6 +2658,16 @@ export function CanvasBoard({
           delete next[k];
           return next;
         });
+        setPendingActivityLedByUid((prev) => {
+          const next = { ...prev };
+          delete next[k];
+          return next;
+        });
+        setPendingLevelOfEffortByUid((prev) => {
+          const next = { ...prev };
+          delete next[k];
+          return next;
+        });
         router.refresh();
         setSelectedTile(null);
         return true;
@@ -2534,6 +2684,7 @@ export function CanvasBoard({
     drawerContentDirty,
     pendingNotesByUid,
     config.Config_ID,
+    config.handsOnKeyboardSupport,
     router,
   ]);
 
@@ -2578,6 +2729,16 @@ export function CanvasBoard({
             return next;
           });
           setPendingDesiredOutcomesByUid((prev) => {
+            const next = { ...prev };
+            delete next[k];
+            return next;
+          });
+          setPendingActivityLedByUid((prev) => {
+            const next = { ...prev };
+            delete next[k];
+            return next;
+          });
+          setPendingLevelOfEffortByUid((prev) => {
             const next = { ...prev };
             delete next[k];
             return next;
@@ -2633,6 +2794,8 @@ export function CanvasBoard({
       Attendees: string;
       Resources: string;
       Desired_Outcomes: string;
+      activityLed?: CustomerActivityLed;
+      Level_Of_Effort?: string;
     }> = [];
     for (const key of savePatchKeys) {
       const tile = tileState.find((t) => tileStableKey(t) === key);
@@ -2660,6 +2823,20 @@ export function CanvasBoard({
         Desired_Outcomes: Object.prototype.hasOwnProperty.call(pendingDesiredOutcomesByUid, key)
           ? pendingDesiredOutcomesByUid[key]!
           : (tile.Desired_Outcomes ?? ""),
+        ...(tile.Category === "customer_activity"
+          ? {
+              Level_Of_Effort: Object.prototype.hasOwnProperty.call(pendingLevelOfEffortByUid, key)
+                ? pendingLevelOfEffortByUid[key]!
+                : (tile.Level_Of_Effort ?? ""),
+              ...(config.handsOnKeyboardSupport
+                ? {
+                    activityLed: Object.prototype.hasOwnProperty.call(pendingActivityLedByUid, key)
+                      ? pendingActivityLedByUid[key]!
+                      : parseCustomerActivityLed(tile.activityLed),
+                  }
+                : {}),
+            }
+          : {}),
       });
     }
     if (!updates.length) return true;
@@ -2722,6 +2899,20 @@ export function CanvasBoard({
         return next;
       });
       setPendingDesiredOutcomesByUid((prev) => {
+        const next = { ...prev };
+        for (const key of savePatchKeys) {
+          delete next[key];
+        }
+        return next;
+      });
+      setPendingActivityLedByUid((prev) => {
+        const next = { ...prev };
+        for (const key of savePatchKeys) {
+          delete next[key];
+        }
+        return next;
+      });
+      setPendingLevelOfEffortByUid((prev) => {
         const next = { ...prev };
         for (const key of savePatchKeys) {
           delete next[key];
@@ -3263,7 +3454,7 @@ export function CanvasBoard({
 
   const canvasToolbarCss = useMemo(
     () =>
-      `#${canvasToolbarScopeId} .canvasToolbarAddBtn{background-color:${canvasToolbarAccent}!important}#${canvasToolbarScopeId} .canvasToolbarAddBtn:hover:not(:disabled){background-color:${canvasToolbarPrimaryHover}!important}#${canvasToolbarScopeId} .canvasToolbarAddBtn:focus-visible{outline:2px solid ${canvasToolbarAccent};outline-offset:2px}#${canvasToolbarScopeId} .canvasToolbarViewToggle{border-color:${canvasToolbarAccent}!important;color:${canvasToolbarAccent}!important}#${canvasToolbarScopeId} .canvasToolbarViewToggle:hover{background-color:${canvasToolbarOutlineHoverBg}!important}#${canvasToolbarScopeId} .canvasToolbarSave{background-color:${canvasToolbarAccent}!important}#${canvasToolbarScopeId} .canvasToolbarSave:hover:not(:disabled){background-color:${canvasToolbarPrimaryHover}!important}#${canvasToolbarScopeId} .canvasToolbarCheckbox{accent-color:${canvasToolbarAccent}}.configColorEditorPrimaryBtn{background-color:${configColorEditorSaveAccent}!important}.configColorEditorPrimaryBtn:hover:not(:disabled){background-color:${configColorEditorSaveHover}!important}`,
+      `#${canvasToolbarScopeId} .canvasToolbarAddBtn{background-color:${canvasToolbarAccent}!important}#${canvasToolbarScopeId} .canvasToolbarAddBtn:hover:not(:disabled){background-color:${canvasToolbarPrimaryHover}!important}#${canvasToolbarScopeId} .canvasToolbarAddBtn:focus-visible{outline:2px solid ${canvasToolbarAccent};outline-offset:2px}#${canvasToolbarScopeId} .canvasToolbarViewToggle{border-color:${canvasToolbarAccent}!important;color:${canvasToolbarAccent}!important}#${canvasToolbarScopeId} .canvasToolbarViewToggle:hover{background-color:${canvasToolbarOutlineHoverBg}!important}#${canvasToolbarScopeId} .canvasToolbarSave{background-color:${canvasToolbarAccent}!important}#${canvasToolbarScopeId} .canvasToolbarSave:hover:not(:disabled){background-color:${canvasToolbarPrimaryHover}!important}#${canvasToolbarScopeId} .canvasToolbarCheckbox{accent-color:${canvasToolbarAccent}}#${canvasToolbarScopeId} .canvasToolbarBackBtn{color:${canvasToolbarAccent}!important;border-color:${canvasToolbarAccent}!important}#${canvasToolbarScopeId} .canvasToolbarBackBtn:hover{background-color:${canvasToolbarOutlineHoverBg}!important}.configColorEditorPrimaryBtn{background-color:${configColorEditorSaveAccent}!important}.configColorEditorPrimaryBtn:hover:not(:disabled){background-color:${configColorEditorSaveHover}!important}`,
     [
       canvasToolbarScopeId,
       canvasToolbarAccent,
@@ -3372,13 +3563,15 @@ export function CanvasBoard({
     }
     const chosenTitle = draftChosenTitle.trim();
 
-    const patchBody: Record<string, string> = {
+    const patchBody: Record<string, string | boolean> = {
       chosenTitle: chosenTitle === defaultTopToolbarTitle ? "" : chosenTitle,
       timelineStartDate: draftTimelineStartDate.trim(),
       logoDataUrl: draftLogoDataUrl.trim(),
       onboardingSessionTileColor: parseHexColorOptional(ob) ?? "",
       customerActivityTileColor: parseHexColorOptional(cb) ?? "",
       buttonColor: parseHexColorOptional(btn) ?? "",
+      handsOnKeyboardSupport: draftHandsOnKeyboardSupport,
+      partnerName: draftHandsOnKeyboardSupport ? draftPartnerName.trim() : "",
     };
 
     if (!isAiDecisioningStudio) {
@@ -3428,6 +3621,8 @@ export function CanvasBoard({
     draftOnboardingSessionTileColor,
     draftWorkstreamGradientBottomColor,
     draftWorkstreamGradientTopColor,
+    draftHandsOnKeyboardSupport,
+    draftPartnerName,
     isAiDecisioningStudio,
     router,
   ]);
@@ -3448,11 +3643,11 @@ export function CanvasBoard({
               {topToolbarBackHref ? (
                 <Link
                   href={topToolbarBackHref}
-                  className="inline-flex shrink-0 rounded-md border border-[#d7ccf6] bg-white p-1.5 text-[#4c2b7f] shadow-sm transition hover:bg-[#f6efff]"
+                  className="canvasToolbarBackBtn inline-flex shrink-0 rounded-md border bg-white p-1.5 shadow-sm transition"
                   aria-label="Back to all configs"
                   title="Back to all configs"
                 >
-                  <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden />
+                  <ArrowLeft className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
                 </Link>
               ) : null}
               {isAiDecisioningStudio ? (
@@ -3495,17 +3690,6 @@ export function CanvasBoard({
                       : "View Swimlane Timeline"}
                   </button>
                   {showAddTileToolbarButton ? addTileSquareButton : null}
-                  {brazeCoreView === "gantt" ? (
-                    <label className="inline-flex select-none items-center gap-1.5 text-[10px] font-medium text-[#300266]">
-                      <input
-                        type="checkbox"
-                        className="canvasToolbarCheckbox h-[14px] w-[14px] rounded border-[#c9c4ef]"
-                        checked={showOnboardingSessionsInGantt}
-                        onChange={(e) => setShowOnboardingSessionsInGantt(e.target.checked)}
-                      />
-                      Show onboarding sessions
-                    </label>
-                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -3700,7 +3884,7 @@ export function CanvasBoard({
               {renderReadOnly ? (
                 <BrazeCoreGanttChart
                   tiles={visibleTileState}
-                  showOnboardingSessions={showOnboardingSessionsInGantt}
+                  showOnboardingSessions={false}
                   planOptionId={config.planOptionId}
                   durationWeeks={durationWeeks}
                   timelineColumns={timelineColumns}
@@ -3715,6 +3899,8 @@ export function CanvasBoard({
                   timelineRailRef={timelineRef}
                   laneLegend={brazeCoreGanttLaneLegend}
                   legendProspectLabel={chartProspectLegendName}
+                  handsOnKeyboardSupport={Boolean(config.handsOnKeyboardSupport)}
+                  legendPartnerLabel={config.partnerName}
                   aiDecisioningCategoryColors={aiGanttCategoryColorsProp}
                   workstreamLaneColorOverrides={workstreamLaneColorOverrides}
                   workstreamLabelTextTypeById={workstreamLabelTextTypeById}
@@ -3736,7 +3922,7 @@ export function CanvasBoard({
                 <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
                   <BrazeCoreGanttChart
                     tiles={visibleTileState}
-                    showOnboardingSessions={showOnboardingSessionsInGantt}
+                    showOnboardingSessions={false}
                     planOptionId={config.planOptionId}
                     durationWeeks={durationWeeks}
                     timelineColumns={timelineColumns}
@@ -3752,6 +3938,8 @@ export function CanvasBoard({
                     spanResize={brazeCoreGanttSpanResize}
                     laneLegend={brazeCoreGanttLaneLegend}
                     legendProspectLabel={chartProspectLegendName}
+                    handsOnKeyboardSupport={Boolean(config.handsOnKeyboardSupport)}
+                    legendPartnerLabel={config.partnerName}
                     aiDecisioningCategoryColors={aiGanttCategoryColorsProp}
                     workstreamLaneColorOverrides={workstreamLaneColorOverrides}
                     workstreamLabelTextTypeById={workstreamLabelTextTypeById}
@@ -4140,6 +4328,13 @@ export function CanvasBoard({
                   timelineStartDate={draftTimelineStartDate}
                   onTimelineStartDateChange={setDraftTimelineStartDate}
                   showTimelineHint={false}
+                  handsOnKeyboardSupport={draftHandsOnKeyboardSupport}
+                  partnerName={draftPartnerName}
+                  onHandsOnKeyboardSupportChange={(value) => {
+                    setDraftHandsOnKeyboardSupport(value);
+                    if (!value) setDraftPartnerName("");
+                  }}
+                  onPartnerNameChange={setDraftPartnerName}
                   logoDataUrl={draftLogoDataUrl}
                   logoFileName={draftLogoFileName}
                   disabled={savingConfigColors}
@@ -4294,6 +4489,8 @@ export function CanvasBoard({
         onDrawerAttendeesCommit={handleDrawerAttendeesCommit}
         onDrawerResourcesCommit={handleDrawerResourcesCommit}
         onDrawerDesiredOutcomesCommit={handleDrawerDesiredOutcomesCommit}
+        onDrawerLevelOfEffortCommit={handleDrawerLevelOfEffortCommit}
+        onDrawerActivityLedCommit={handleDrawerActivityLedCommit}
         showDeleteTile={showDrawerDeleteButton}
         onDeleteTilePress={openDeleteTileConfirm}
         deleteTilePending={deleteTilePending}

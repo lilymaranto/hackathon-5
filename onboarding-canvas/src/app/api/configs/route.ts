@@ -75,6 +75,8 @@ export async function POST(request: NextRequest) {
         whatsapp?: boolean;
         inProductMessaging?: boolean;
       };
+      handsOnKeyboardSupport?: boolean;
+      partnerName?: string;
     };
 
     const channels = {
@@ -183,6 +185,12 @@ export async function POST(request: NextRequest) {
       ...(wsBottomHex ? { workstreamGradientBottomColor: wsBottomHex } : {}),
       ...(body.logoDataUrl !== undefined ? { logoDataUrl: body.logoDataUrl } : {}),
       ...(timelineDates?.length ? { timelineDates } : {}),
+      ...(body.handsOnKeyboardSupport
+        ? {
+            handsOnKeyboardSupport: true,
+            partnerName: body.partnerName?.trim() ?? "",
+          }
+        : {}),
     });
 
     return NextResponse.json({ data: created });

@@ -72,6 +72,8 @@ export async function PATCH(
       TimelineAnnotation?: TimelineAnnotationDocument | string | unknown;
       timelineStartDate?: string;
       timelineDates?: string[];
+      handsOnKeyboardSupport?: boolean;
+      partnerName?: string;
     };
 
     const hasWsOrderKey = Object.prototype.hasOwnProperty.call(body, "brazeCoreWorkstreamOrder");
@@ -139,6 +141,8 @@ export async function PATCH(
       );
     }
 
+    const hasHandsOnKeyboardKey = Object.prototype.hasOwnProperty.call(body, "handsOnKeyboardSupport");
+    const hasPartnerNameKey = Object.prototype.hasOwnProperty.call(body, "partnerName");
     const hasTimelineStartKey = Object.prototype.hasOwnProperty.call(body, "timelineStartDate");
     const hasTimelineDatesKey = Object.prototype.hasOwnProperty.call(body, "timelineDates");
     let timelineDatesPatch: string[] | undefined;
@@ -213,6 +217,15 @@ export async function PATCH(
         ? { timelineAnnotation: timelineAnnotationPatch }
         : {}),
       ...(hasTimelineDatesKey || hasTimelineStartKey ? { timelineDates: timelineDatesPatch ?? [] } : {}),
+      ...(hasHandsOnKeyboardKey
+        ? {
+            handsOnKeyboardSupport: Boolean(body.handsOnKeyboardSupport),
+            ...(body.handsOnKeyboardSupport === false ? { partnerName: "" } : {}),
+          }
+        : {}),
+      ...(hasPartnerNameKey && body.handsOnKeyboardSupport !== false
+        ? { partnerName: body.partnerName?.trim() ?? "" }
+        : {}),
     });
 
     const shouldReseedTiles =

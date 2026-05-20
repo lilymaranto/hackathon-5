@@ -45,6 +45,10 @@ export function ConfigEditForm({ config }: Props) {
   );
   const [logoDataUrl, setLogoDataUrl] = useState(config.logoDataUrl ?? "");
   const [logoFileName, setLogoFileName] = useState("");
+  const [handsOnKeyboardSupport, setHandsOnKeyboardSupport] = useState(
+    Boolean(config.handsOnKeyboardSupport),
+  );
+  const [partnerName, setPartnerName] = useState(config.partnerName ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isAiDecisioningStudio = productType === "AI Decisioning Studio";
@@ -103,6 +107,8 @@ export function ConfigEditForm({ config }: Props) {
         buttonColor: parseHexColorOptional(btn) ?? "",
         logoDataUrl: logoDataUrl.trim(),
         timelineStartDate: timelineStartDate.trim(),
+        handsOnKeyboardSupport,
+        partnerName: handsOnKeyboardSupport ? partnerName.trim() : "",
         ...(!isAiDecisioningStudio
           ? {
               workstreamGradientTopColor: parseHexColorOptional(wst) ?? "",
@@ -225,6 +231,13 @@ export function ConfigEditForm({ config }: Props) {
           brandExtractScope={config.Config_ID}
           timelineStartDate={timelineStartDate}
           onTimelineStartDateChange={setTimelineStartDate}
+          handsOnKeyboardSupport={handsOnKeyboardSupport}
+          partnerName={partnerName}
+          onHandsOnKeyboardSupportChange={(value) => {
+            setHandsOnKeyboardSupport(value);
+            if (!value) setPartnerName("");
+          }}
+          onPartnerNameChange={setPartnerName}
           logoDataUrl={logoDataUrl}
           logoFileName={logoFileName}
           disabled={saving}

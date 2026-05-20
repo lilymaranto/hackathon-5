@@ -1,4 +1,5 @@
-import type { ConfigRecord, TileCategory } from "@/lib/types";
+import { parseCustomerActivityLed } from "@/lib/customer-activity-led";
+import type { ConfigRecord, CustomerActivityLed, TileCategory } from "@/lib/types";
 import type { CSSProperties } from "react";
 
 /** Default swimlane / Gantt fills (used when config has no custom hex). */
@@ -124,9 +125,15 @@ export function textColorOnTileBackground(bgHex: string): "#ffffff" | "#1a102b" 
   return L > 0.45 ? "#1a102b" : "#ffffff";
 }
 
+/** Partner-led white inner rim (~33% thinner than the original 2px stroke). */
+export const PARTNER_LED_WHITE_OUTLINE_WIDTH_PX = 1.5;
+/** Outline offset: leaves a visible band of tile fill color outside the white line (swimlane). */
+export const PARTNER_LED_SWIMLANE_OUTLINE_OFFSET_PX = -5;
+
 export function brazeSwimlaneTileCategoryStyle(
   colors: ResolvedTileCategoryColors,
   category: TileCategory,
+  activityLed?: CustomerActivityLed,
 ): CSSProperties | undefined {
   if (category === "milestone") return undefined;
   if (category === "onboarding_session") {
@@ -135,8 +142,17 @@ export function brazeSwimlaneTileCategoryStyle(
       color: textColorOnTileBackground(colors.onboardingBg),
     };
   }
+  const bg = colors.customerBg;
+  const partnerLed =
+    category === "customer_activity" && parseCustomerActivityLed(activityLed) === "partner";
   return {
-    backgroundColor: colors.customerBg,
-    color: textColorOnTileBackground(colors.customerBg),
+    backgroundColor: bg,
+    color: textColorOnTileBackground(bg),
+    ...(partnerLed
+      ? {
+          outline: `${PARTNER_LED_WHITE_OUTLINE_WIDTH_PX}px solid #ffffff`,
+          outlineOffset: `${PARTNER_LED_SWIMLANE_OUTLINE_OFFSET_PX}px`,
+        }
+      : {}),
   };
 }
