@@ -1,5 +1,6 @@
 "use client";
 
+import { InstantTooltip } from "@/components/InstantTooltip";
 import { labelForPlanOption } from "@/lib/constants";
 import { ConfigRecord } from "@/lib/types";
 import {
@@ -161,119 +162,128 @@ export function ConfigsTable({ configs }: Props) {
                     <td className="px-3 py-3">{labelForPlanOption(config.planOptionId)}</td>
                     <td className="px-3 py-3">
                       <div className="flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          title="Copy this account's guest password to your clipboard"
-                          aria-label="Copy this account's guest password to your clipboard"
-                          disabled={isDeleting}
-                          className="rounded-md border border-[#d4c9f6] p-2.5 text-[#4a2b7a] hover:bg-[#f2e8ff] disabled:pointer-events-none disabled:opacity-50"
-                          onClick={() => copyPassword(config.Config_ID, config.Password)}
-                        >
-                          {copiedId === config.Config_ID ? <Check size={18} /> : <KeyRound size={18} />}
-                        </button>
-                        <Link
-                          title="Edit account settings: title, industry, duration, product type, and password"
-                          aria-label="Edit account settings: title, industry, duration, product type, and password"
-                          href={`/employee/configs/${encodeURIComponent(config.Config_ID)}/edit`}
-                          className="rounded-md border border-[#d4c9f6] p-2.5 text-[#4a2b7a] hover:bg-[#f2e8ff]"
-                          aria-disabled={isDeleting}
-                          tabIndex={isDeleting ? -1 : undefined}
-                          onClick={(e) => {
-                            if (isDeleting) e.preventDefault();
-                          }}
-                        >
-                          <Pencil size={18} />
-                        </Link>
-                        <Link
-                          title="Open the onboarding timeline canvas for this account"
-                          aria-label="Open the onboarding timeline canvas for this account"
-                          href={`/employee/configs/${encodeURIComponent(config.Config_ID)}`}
-                          className="rounded-md border border-[#d4c9f6] p-2.5 text-[#4a2b7a] hover:bg-[#f2e8ff]"
-                          aria-disabled={isDeleting}
-                          tabIndex={isDeleting ? -1 : undefined}
-                          onClick={(e) => {
-                            if (isDeleting) e.preventDefault();
-                          }}
-                        >
-                          <ArrowRight size={18} />
-                        </Link>
-                        <button
-                          type="button"
-                          title="Export OM hand-off notes to a new Google Doc"
-                          aria-label="Export OM hand-off notes to a new Google Doc"
-                          disabled={isDeleting || isExporting || status !== "authenticated"}
-                          onClick={() => {
-                            setExportError(null);
-                            setExportConfirm(config);
-                          }}
-                          className="rounded-md border border-[#c9e8d4] p-2.5 text-[#1f6b3f] transition-none hover:bg-[#ecfdf3] disabled:pointer-events-none disabled:opacity-50"
-                        >
-                          {isExporting ? (
-                            <Loader2 size={18} className="animate-spin" aria-hidden />
-                          ) : (
-                            <FileInput size={18} aria-hidden />
-                          )}
-                        </button>
-                        <button
-                          type="button"
-                          title={
+                        <InstantTooltip label="Copy this account's guest password to your clipboard">
+                          <button
+                            type="button"
+                            aria-label="Copy this account's guest password to your clipboard"
+                            disabled={isDeleting}
+                            className="rounded-md border border-[#d4c9f6] p-2.5 text-[#4a2b7a] hover:bg-[#f2e8ff] disabled:pointer-events-none disabled:opacity-50"
+                            onClick={() => copyPassword(config.Config_ID, config.Password)}
+                          >
+                            {copiedId === config.Config_ID ? <Check size={18} /> : <KeyRound size={18} />}
+                          </button>
+                        </InstantTooltip>
+                        <InstantTooltip label="Edit account settings: title, industry, duration, product type, and password">
+                          <Link
+                            aria-label="Edit account settings: title, industry, duration, product type, and password"
+                            href={`/employee/configs/${encodeURIComponent(config.Config_ID)}/edit`}
+                            className="rounded-md border border-[#d4c9f6] p-2.5 text-[#4a2b7a] hover:bg-[#f2e8ff]"
+                            aria-disabled={isDeleting}
+                            tabIndex={isDeleting ? -1 : undefined}
+                            onClick={(e) => {
+                              if (isDeleting) e.preventDefault();
+                            }}
+                          >
+                            <Pencil size={18} />
+                          </Link>
+                        </InstantTooltip>
+                        <InstantTooltip label="Open the onboarding timeline canvas for this account">
+                          <Link
+                            aria-label="Open the onboarding timeline canvas for this account"
+                            href={`/employee/configs/${encodeURIComponent(config.Config_ID)}`}
+                            className="rounded-md border border-[#d4c9f6] p-2.5 text-[#4a2b7a] hover:bg-[#f2e8ff]"
+                            aria-disabled={isDeleting}
+                            tabIndex={isDeleting ? -1 : undefined}
+                            onClick={(e) => {
+                              if (isDeleting) e.preventDefault();
+                            }}
+                          >
+                            <ArrowRight size={18} />
+                          </Link>
+                        </InstantTooltip>
+                        <InstantTooltip label="Export OM hand-off notes to a new Google Doc">
+                          <button
+                            type="button"
+                            aria-label="Export OM hand-off notes to a new Google Doc"
+                            disabled={isDeleting || isExporting || status !== "authenticated"}
+                            onClick={() => {
+                              setExportError(null);
+                              setExportConfirm(config);
+                            }}
+                            className="rounded-md border border-[#c9e8d4] p-2.5 text-[#1f6b3f] transition-none hover:bg-[#ecfdf3] disabled:pointer-events-none disabled:opacity-50"
+                          >
+                            {isExporting ? (
+                              <Loader2 size={18} className="animate-spin" aria-hidden />
+                            ) : (
+                              <FileInput size={18} aria-hidden />
+                            )}
+                          </button>
+                        </InstantTooltip>
+                        <InstantTooltip
+                          label={
                             docUrl
                               ? "Open the last exported hand-off Google Doc"
                               : "Export once to create a doc; then you can reopen it here"
                           }
-                          aria-label="View exported hand-off Google Doc"
-                          disabled={isDeleting || !docUrl}
-                          onClick={() => docUrl && window.open(docUrl, "_blank", "noopener,noreferrer")}
-                          className={[
-                            "relative inline-flex rounded-md border p-2.5 transition-none",
-                            docUrl
-                              ? "border-[#d4c9f6] text-[#4a2b7a] hover:bg-[#f2e8ff]"
-                              : "cursor-not-allowed border-[#e8e4f0] text-[#b8b0c9]",
-                          ].join(" ")}
                         >
-                          <FileText size={18} className="opacity-90" aria-hidden />
-                          <Eye
-                            size={11}
-                            className="absolute -bottom-0.5 -right-0.5 rounded-sm bg-white text-[#801ED7] ring-1 ring-[#e8e4f0]"
-                            aria-hidden
-                          />
-                        </button>
-                        <button
-                          type="button"
-                          title="Duplicate this account: copy settings and all timeline tiles (new guest password)"
-                          aria-label="Duplicate this account: copy settings and all timeline tiles"
-                          disabled={
-                            isDeleting ||
-                            !!duplicatingId ||
-                            isExporting ||
-                            status !== "authenticated"
-                          }
-                          onClick={() => void duplicateConfigRow(config)}
-                          className="rounded-md border border-[#d4c9f6] p-2.5 text-[#4a2b7a] hover:bg-[#f2e8ff] disabled:pointer-events-none disabled:opacity-50"
-                        >
-                          {isDuplicating ? (
-                            <Loader2 size={18} className="animate-spin" aria-hidden />
-                          ) : (
-                            <CopyPlus size={18} aria-hidden />
-                          )}
-                        </button>
-                        <button
-                          type="button"
-                          title="Delete this account and all of its timeline tiles (cannot be undone)"
-                          aria-label="Delete this account and all of its timeline tiles (cannot be undone)"
-                          disabled={!!deletingId}
-                          onClick={() => {
-                            setDeleteError(null);
-                            setDeleteTarget(config);
-                          }}
-                          className="rounded-md border border-[#f1c4cc] p-2.5 text-[#b5334d] hover:bg-[#fff1f4] disabled:pointer-events-none disabled:opacity-60"
-                        >
-                          {isDeleting ? (
-                            <Loader2 size={18} className="animate-spin" aria-hidden />
-                          ) : (
-                            <Trash2 size={18} />
-                          )}
-                        </button>
+                          <button
+                            type="button"
+                            aria-label="View exported hand-off Google Doc"
+                            disabled={isDeleting || !docUrl}
+                            onClick={() => docUrl && window.open(docUrl, "_blank", "noopener,noreferrer")}
+                            className={[
+                              "relative inline-flex rounded-md border p-2.5 transition-none",
+                              docUrl
+                                ? "border-[#d4c9f6] text-[#4a2b7a] hover:bg-[#f2e8ff]"
+                                : "cursor-not-allowed border-[#e8e4f0] text-[#b8b0c9]",
+                            ].join(" ")}
+                          >
+                            <FileText size={18} className="opacity-90" aria-hidden />
+                            <Eye
+                              size={11}
+                              className="absolute -bottom-0.5 -right-0.5 rounded-sm bg-white text-[#801ED7] ring-1 ring-[#e8e4f0]"
+                              aria-hidden
+                            />
+                          </button>
+                        </InstantTooltip>
+                        <InstantTooltip label="Duplicate this account: copy settings and all timeline tiles (new guest password)">
+                          <button
+                            type="button"
+                            aria-label="Duplicate this account: copy settings and all timeline tiles"
+                            disabled={
+                              isDeleting ||
+                              !!duplicatingId ||
+                              isExporting ||
+                              status !== "authenticated"
+                            }
+                            onClick={() => void duplicateConfigRow(config)}
+                            className="rounded-md border border-[#d4c9f6] p-2.5 text-[#4a2b7a] hover:bg-[#f2e8ff] disabled:pointer-events-none disabled:opacity-50"
+                          >
+                            {isDuplicating ? (
+                              <Loader2 size={18} className="animate-spin" aria-hidden />
+                            ) : (
+                              <CopyPlus size={18} aria-hidden />
+                            )}
+                          </button>
+                        </InstantTooltip>
+                        <InstantTooltip label="Delete this account and all of its timeline tiles (cannot be undone)">
+                          <button
+                            type="button"
+                            aria-label="Delete this account and all of its timeline tiles (cannot be undone)"
+                            disabled={!!deletingId}
+                            onClick={() => {
+                              setDeleteError(null);
+                              setDeleteTarget(config);
+                            }}
+                            className="rounded-md border border-[#f1c4cc] p-2.5 text-[#b5334d] hover:bg-[#fff1f4] disabled:pointer-events-none disabled:opacity-60"
+                          >
+                            {isDeleting ? (
+                              <Loader2 size={18} className="animate-spin" aria-hidden />
+                            ) : (
+                              <Trash2 size={18} />
+                            )}
+                          </button>
+                        </InstantTooltip>
                         {isDeleting && (
                           <span className="text-sm text-[#6B5A9A]" aria-live="polite">
                             Deleting…

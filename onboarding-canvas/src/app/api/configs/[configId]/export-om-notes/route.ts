@@ -1,13 +1,15 @@
+import { authOptions } from "@/lib/auth-options";
 import { fetchConfigById, fetchTiles, patchConfig } from "@/lib/caboodle";
+import { googleAccessTokenFromJwt } from "@/lib/google-oauth-token";
 import {
   buildOmExportSections,
   shouldExportOmTile,
   sortTilesForOmExport,
 } from "@/lib/om-handoff-export";
 import { createOmHandoffGoogleDoc } from "@/lib/om-handoff-google-doc";
+import { getServerSession } from "next-auth";
 import { getToken } from "next-auth/jwt";
 import { NextRequest, NextResponse } from "next/server";
-import { google } from "googleapis";
 
 function authSecret(): string {
   const s = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
@@ -19,53 +21,27 @@ function isBrazeEmployeeEmail(email: string | null | undefined): boolean {
   return !!email && email.toLowerCase().endsWith("@braze.com");
 }
 
-async function googleAccessTokenFromJwt(token: {
-  access_token?: string;
-  refresh_token?: string;
-  expires_at?: number;
-}): Promise<string> {
-  const clientId = process.env.GOOGLE_CLIENT_ID;
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-  if (!clientId || !clientSecret) {
-    throw new Error("GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be configured.");
-  }
-
-  const expiresAtSec = typeof token.expires_at === "number" ? token.expires_at : 0;
-  const expiresAtMs = expiresAtSec > 0 ? expiresAtSec * 1000 : 0;
-  if (
-    token.access_token &&
-    (!expiresAtMs || Date.now() < expiresAtMs - 60_000)
-  ) {
-    return token.access_token;
-  }
-
-  if (!token.refresh_token) {
-    throw new Error(
-      "Google session has no refresh token. Sign out and sign in again (consent) to enable export.",
-    );
-  }
-
-  const oauth2 = new google.auth.OAuth2(clientId, clientSecret);
-  oauth2.setCredentials({ refresh_token: token.refresh_token });
-  const refreshed = await oauth2.refreshAccessToken();
-  const next = refreshed.credentials.access_token;
-  if (!next) throw new Error("Google did not return an access token after refresh.");
-  return next;
-}
-
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ configId: string }> },
 ) {
   try {
+    const session = await getServerSession(authOptions);
+    const email = session?.user?.email;
+    if (!session?.user || !isBrazeEmployeeEmail(email)) {
+      return NextResponse.json({ error: "Sign in with your Braze Google account." }, { status: 401 });
+    }
+    if (session.error === "RefreshAccessTokenError") {
+      return NextResponse.json(
+        { error: "Google session expired. Sign in again to continue." },
+        { status: 401 },
+      );
+    }
+
     const jwt = await getToken({
       req: request,
       secret: authSecret(),
     });
-    const email = jwt?.email ? String(jwt.email) : null;
-    if (!jwt?.sub || !isBrazeEmployeeEmail(email)) {
-      return NextResponse.json({ error: "Sign in with your Braze Google account." }, { status: 401 });
-    }
 
     const { configId } = await params;
     const config = await fetchConfigById(configId);
@@ -90,11 +66,13 @@ export async function POST(
       return block;
     });
 
-    const accessToken = await googleAccessTokenFromJwt({
-      access_token: jwt.access_token as string | undefined,
-      refresh_token: jwt.refresh_token as string | undefined,
-      expires_at: jwt.expires_at as number | undefined,
-    });
+    const accessToken =
+      session.accessToken ??
+      (await googleAccessTokenFromJwt({
+        access_token: jwt?.access_token as string | undefined,
+        refresh_token: jwt?.refresh_token as string | undefined,
+        expires_at: jwt?.expires_at as number | undefined,
+      }));
 
     const docTitle = `${config.Title} - Onboarding Hand-off Notes`;
     const { url } = await createOmHandoffGoogleDoc({

@@ -17,7 +17,7 @@ export default function Home() {
           </p>
           <div className="mt-9 flex flex-wrap items-center gap-3">
             <Link
-              href="/employee/signin"
+              href="/employee/configs"
               className="rounded-full bg-gradient-to-r from-[#8325db] to-[#f35f9c] px-6 py-3 text-base font-semibold text-white shadow-sm transition hover:opacity-90"
             >
               Braze Employee Sign In

@@ -1,5 +1,6 @@
 "use client";
 
+import { InstantTooltip } from "@/components/InstantTooltip";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback } from "react";
 
@@ -22,14 +23,15 @@ function ConfigsMineToggleInner() {
 
   return (
     <label className="flex shrink-0 cursor-pointer items-center gap-2.5 text-base font-medium text-[#2c1650] whitespace-nowrap">
-      <input
-        type="checkbox"
-        checked={mine}
-        onChange={(event) => apply(event.target.checked)}
-        title="Only show configs you created"
-        aria-label="Only show configs you created"
-        className="h-[18px] w-[18px] shrink-0 rounded border-[#c4b8e8] text-[#801ED7] accent-[#801ED7] focus:ring-2 focus:ring-[#801ED7]/30"
-      />
+      <InstantTooltip label="Only show configs you created">
+        <input
+          type="checkbox"
+          checked={mine}
+          onChange={(event) => apply(event.target.checked)}
+          aria-label="Only show configs you created"
+          className="h-[18px] w-[18px] shrink-0 rounded border-[#c4b8e8] text-[#801ED7] accent-[#801ED7] focus:ring-2 focus:ring-[#801ED7]/30"
+        />
+      </InstantTooltip>
       Only show mine
     </label>
   );

@@ -1,12 +1,22 @@
 "use client";
 
-import { signIn } from "next-auth/react";
+import { signIn, useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 export default function EmployeeSignInPage() {
+  const router = useRouter();
+  const { status } = useSession();
+
   useEffect(() => {
-    void signIn("google", { callbackUrl: "/employee/configs" });
-  }, []);
+    if (status === "authenticated") {
+      router.replace("/employee/configs");
+    }
+  }, [router, status]);
+
+  if (status === "authenticated") {
+    return null;
+  }
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-[linear-gradient(145deg,#f5e9ff_0%,#fff3f8_45%,#fffaf1_100%)] p-6">
@@ -16,11 +26,13 @@ export default function EmployeeSignInPage() {
         </p>
         <h1 className="mt-3 text-4xl font-semibold text-[#28134d]">Onboarding Canvas</h1>
         <p className="mt-3 max-w-xl text-sm text-[#5e478f]">
-          Redirecting to Google sign-in. If nothing happens, use the button below.
+          Sign in with your Braze Google account to manage onboarding configs. If you are already
+          signed into Google, this should only take a moment.
         </p>
         <button
+          disabled={status === "loading"}
           onClick={() => void signIn("google", { callbackUrl: "/employee/configs" })}
-          className="mt-6 rounded-full bg-gradient-to-r from-[#8325db] to-[#f35f9c] px-5 py-2.5 text-sm font-semibold text-white"
+          className="mt-6 rounded-full bg-gradient-to-r from-[#8325db] to-[#f35f9c] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
         >
           Sign in with Google
         </button>

@@ -1,3 +1,4 @@
+import { refreshGoogleAccessToken } from "@/lib/google-oauth-token";
 import { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 
@@ -11,6 +12,10 @@ const googleOAuthScopes = [
 
 export const authOptions: NextAuthOptions = {
   secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
+  session: {
+    strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60,
+  },
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID ?? "missing-google-client-id",
@@ -18,7 +23,6 @@ export const authOptions: NextAuthOptions = {
       authorization: {
         params: {
           scope: googleOAuthScopes,
-          prompt: "consent",
           access_type: "offline",
           response_type: "code",
         },
@@ -59,9 +63,21 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, account }) {
       if (account) {
         token.access_token = account.access_token;
-        token.refresh_token = account.refresh_token;
+        token.refresh_token = account.refresh_token ?? token.refresh_token;
         token.expires_at = account.expires_at;
+        return token;
       }
+
+      const expiresAtSec = typeof token.expires_at === "number" ? token.expires_at : 0;
+      const expiresAtMs = expiresAtSec > 0 ? expiresAtSec * 1000 : 0;
+      if (token.access_token && (!expiresAtMs || Date.now() < expiresAtMs - 60_000)) {
+        return token;
+      }
+
+      if (token.refresh_token) {
+        return refreshGoogleAccessToken(token);
+      }
+
       return token;
     },
     async session({ session, token }) {
