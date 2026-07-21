@@ -1,5 +1,6 @@
 import { GROWTH_SILVER_COLUMNS_PER_WEEK } from "@/lib/constants";
 import { isEnterprisePlatinumGanttTile, usesPlanTaskGantt } from "@/lib/enterprise-platinum-gantt";
+import { isPlanGanttMilestoneTile } from "@/lib/plan-gantt-milestones";
 import planSeedsJson from "@/lib/plan-gantt-seeds.json";
 import type { PlanOptionId, TileRecord } from "@/lib/types";
 import type { TimelineConfig } from "@/lib/templates";
@@ -34,6 +35,21 @@ export function planGanttColumnsPerPlanWeek(planOptionId: PlanOptionId): number 
     return GROWTH_SILVER_COLUMNS_PER_WEEK;
   }
   return 1;
+}
+
+/** Plan Gantt resize can snap to half a plan week when the rail has multiple columns per week. */
+export function planGanttSupportsHalfWeekSpanResize(planOptionId: PlanOptionId): boolean {
+  return planGanttColumnsPerPlanWeek(planOptionId) > 1;
+}
+
+export function planGanttSpanResizeStepPlanWeeks(planOptionId: PlanOptionId): number {
+  return planGanttSupportsHalfWeekSpanResize(planOptionId) ? 0.5 : 1;
+}
+
+/** Divisor for {@link BrazeCoreSpanResizeHandle} drag math on the plan-task Gantt rail. */
+export function planGanttSpanResizeDragColumnCount(planOptionId: PlanOptionId): number {
+  const planWeeks = planTabWeekCount(planOptionId);
+  return planGanttSupportsHalfWeekSpanResize(planOptionId) ? planWeeks * 2 : planWeeks;
 }
 
 /** Total Gantt rail columns (plan-task view only; swimlane uses `templates.ts` grids). */
@@ -94,7 +110,7 @@ export function usesPlanTaskGanttWeekGrid(
   planOptionId: PlanOptionId,
   tile: Pick<TileRecord, "Tile_ID">,
 ): boolean {
-  return usesPlanTaskGantt(planOptionId) && isEnterprisePlatinumGanttTile(tile);
+  return usesPlanTaskGantt(planOptionId) && (isEnterprisePlatinumGanttTile(tile) || isPlanGanttMilestoneTile(tile));
 }
 
 function clampPlanWeek(planOptionId: PlanOptionId, planWeek: number): number {
@@ -123,13 +139,15 @@ export function planWeekRangeToTimelineUnits(
   startPlanWeek: number,
   spanPlanWeeks: number,
 ): { startUnit: number; endUnit: number } {
-  const span = Math.max(1, Math.round(spanPlanWeeks));
-  const start = Math.max(1, Math.round(startPlanWeek));
-  const endPlanWeek = Math.min(start + span - 1, planTabWeekCount(planOptionId));
-  return {
-    startUnit: planWeekToTimelineColumnStart(planOptionId, start),
-    endUnit: planWeekToTimelineColumnEnd(planOptionId, endPlanWeek),
-  };
+  const cppw = planGanttColumnsPerPlanWeek(planOptionId);
+  const maxWeek = planTabWeekCount(planOptionId);
+  const start = Math.min(Math.max(startPlanWeek, 1), maxWeek);
+  const minSpan = planGanttSpanResizeStepPlanWeeks(planOptionId);
+  const span = Math.max(minSpan, spanPlanWeeks);
+  const startUnit = (start - 1) * cppw + 1;
+  const total = planGanttTimelineColumnCount(planOptionId);
+  const endUnit = Math.min(total, startUnit + Math.round(span * cppw) - 1);
+  return { startUnit, endUnit };
 }
 
 export function timelineColumnToPlanWeek(planOptionId: PlanOptionId, column: number): number {

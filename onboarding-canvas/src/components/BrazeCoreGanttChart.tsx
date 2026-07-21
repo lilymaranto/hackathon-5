@@ -11,7 +11,9 @@ import {
 } from "@/lib/canvas-layout-y";
 import { EditableTimelinePeriodLabel } from "@/components/EditableTimelinePeriodLabel";
 import { GROWTH_SILVER_COLUMNS_PER_WEEK, WORKSTREAMS } from "@/lib/constants";
-import { getTileTimelineUnits } from "@/lib/timeline-units";
+import { getTileTimelineUnits, type TileTimelineUnitsContext } from "@/lib/timeline-units";
+import { buildGanttPlanTaskRows } from "@/lib/plan-gantt-milestones";
+import { milestoneTileDisplayTitle } from "@/lib/milestone-display-title";
 import type { TimelineAnnotationDocument } from "@/lib/timeline-annotations";
 import { timelineColumnFromClientX } from "@/lib/timeline-annotations";
 import type { TimelineConfig } from "@/lib/templates";
@@ -152,6 +154,7 @@ export type BrazeCoreGanttSpanResizeProps = {
   maxSpanWeeksForTile?: (tile: TileRecord) => number | undefined;
   /** When set, pointer resize steps use this column count (e.g. 28 plan weeks on a 48-col rail). */
   spanResizeDragColumns?: number;
+  spanResizeStepPlanWeeks?: number;
   onSpanChange: (tile: TileRecord, span: number) => void;
   /** When `"aiAdsChevron"`, uses {@link clampAdsChevronSpanWeeks} (AI Decisioning Gantt bars). */
   spanResizeMode?: "braze" | "aiAdsChevron";
@@ -225,6 +228,8 @@ export type BrazeCoreGanttChartProps = {
    * Enterprise Platinum: one Gantt row per plan task, grouped by {@link laneLegend} section lanes.
    */
   enterprisePlanTaskGantt?: boolean;
+  /** Plan-task tiles (no synthetic milestones) for column-accurate milestone anchoring. */
+  planTaskTilesForTimeline?: readonly TileRecord[];
   /** Default Braze rail palette (no custom gradient) → white section labels unless saved in Mongo. */
   useDefaultBrandWorkstreamColors?: boolean;
   /** Enterprise Platinum: drag-reorder section blocks (not individual task rows). */
@@ -453,8 +458,10 @@ function assignLanesInRow(
   tiles: TileRecord[],
   planOptionId: PlanOptionId,
   durationWeeks: number,
+  timelineContext?: TileTimelineUnitsContext,
 ): { tile: TileRecord; lane: number }[] {
-  const units = (tile: TileRecord) => getTileTimelineUnits(planOptionId, tile, durationWeeks);
+  const units = (tile: TileRecord) =>
+    getTileTimelineUnits(planOptionId, tile, durationWeeks, timelineContext);
   const sorted = [...tiles].sort((a, b) => {
     const ua = units(a);
     const ub = units(b);
@@ -630,6 +637,7 @@ function GanttTaskBarDraggable({
   dragDisabled?: boolean;
 }) {
   const cat = tile.Category;
+  const barTitle = milestoneTileDisplayTitle(tile);
   const milestoneFill =
     categoryMilestoneFill ??
     (matchAiDecisioningSwimlaneBars ? ADS_GANTT_MILESTONE_ACCENT : workstreamHue);
@@ -727,7 +735,7 @@ function GanttTaskBarDraggable({
       <button
         ref={setNodeRef}
         type="button"
-        aria-label={tile.Title}
+        aria-label={barTitle}
         className={clsx(
           "absolute z-[30] flex items-center justify-center gap-0.5 overflow-hidden rounded-md px-1 text-center font-semibold leading-tight shadow-sm border-2 bg-white",
           milestoneBarText,
@@ -751,7 +759,7 @@ function GanttTaskBarDraggable({
           aria-hidden
         />
         <span className="line-clamp-2 w-full" style={{ color: milestoneFill }}>
-          {tile.Title}
+          {barTitle}
         </span>
       </button>
     );
@@ -842,6 +850,7 @@ function GanttTaskBarStatic({
   onOpen: () => void;
 }) {
   const cat = tile.Category;
+  const barTitle = milestoneTileDisplayTitle(tile);
   const milestoneFill =
     categoryMilestoneFill ??
     (matchAiDecisioningSwimlaneBars ? ADS_GANTT_MILESTONE_ACCENT : workstreamHue);
@@ -918,7 +927,7 @@ function GanttTaskBarStatic({
     return (
       <button
         type="button"
-        aria-label={tile.Title}
+        aria-label={barTitle}
         className={clsx(
           "absolute z-[30] flex items-center justify-center gap-0.5 overflow-hidden rounded-md px-1 text-center font-semibold leading-tight shadow-sm border-2 bg-white",
           milestoneBarText,
@@ -939,7 +948,7 @@ function GanttTaskBarStatic({
           aria-hidden
         />
         <span className="line-clamp-2 w-full" style={{ color: milestoneFill }}>
-          {tile.Title}
+          {barTitle}
         </span>
       </button>
     );
@@ -1031,6 +1040,7 @@ type BrazeCoreGanttActivityRowProps = {
   explicitWorkstreamLabelTypes?: ReadonlyMap<Workstream, WorkstreamLabelTextType>;
   useDefaultBrandWorkstreamColors?: boolean;
   enterprisePlanTaskGantt?: boolean;
+  timelineUnitsContext?: TileTimelineUnitsContext;
 };
 
 function BrazeCoreGanttActivityRow({
@@ -1053,11 +1063,12 @@ function BrazeCoreGanttActivityRow({
   explicitWorkstreamLabelTypes,
   enterprisePlanTaskGantt = false,
   useDefaultBrandWorkstreamColors = false,
+  timelineUnitsContext,
 }: BrazeCoreGanttActivityRowProps) {
   const headerClickTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const wsId = rowTiles[0]!.Workstream;
   const color = resolveWorkstreamColor(wsId, laneLegend, workstreamLaneColorOverrides);
-  const laneAssigned = assignLanesInRow(rowTiles, planOptionId, durationWeeks);
+  const laneAssigned = assignLanesInRow(rowTiles, planOptionId, durationWeeks, timelineUnitsContext);
   const maxLane = laneAssigned.reduce((m, x) => Math.max(m, x.lane), 0);
   const barYOffset = brazeExpandedFirstRowChrome ? BRAZE_CORE_GANTT_EXPANDED_FIRST_ROW_CHROME_PX : 0;
   const rowMinH = rowTimelineMinHeightPx(maxLane) + barYOffset;
@@ -1090,7 +1101,7 @@ function BrazeCoreGanttActivityRow({
   const bars = laneAssigned.map(({ tile, lane }) => {
     const layoutEditable = !enterprisePlanTaskGantt || planGanttTileLayoutEditable(tile, planOptionId);
     const TaskBar = !readOnly && layoutEditable ? GanttTaskBarDraggable : GanttTaskBarStatic;
-    const tu = getTileTimelineUnits(planOptionId, tile, durationWeeks);
+    const tu = getTileTimelineUnits(planOptionId, tile, durationWeeks, timelineUnitsContext);
     const spanUnits = tu.endUnit - tu.startUnit + 1;
     const leftPct = ((tu.startUnit - 1) / timelineColumns) * 100;
     const widthPct = (spanUnits / timelineColumns) * 100;
@@ -1131,6 +1142,7 @@ function BrazeCoreGanttActivityRow({
               maxSpanWeeks={spanResize.maxSpanWeeksForTile?.(tile)}
               getTimelineWidthPx={spanResize.getTimelineWidthPx}
               spanResizeDragColumns={spanResize.spanResizeDragColumns}
+              spanResizeStepPlanWeeks={spanResize.spanResizeStepPlanWeeks}
               onSpanChange={(span) => spanResize.onSpanChange(tile, span)}
               heightClass="h-8"
               mode={spanResize.spanResizeMode ?? "braze"}
@@ -1277,7 +1289,13 @@ export function BrazeCoreGanttChart({
   enterprisePlanTaskGantt = false,
   useDefaultBrandWorkstreamColors = false,
   sectionSortEnabled = false,
+  planTaskTilesForTimeline,
 }: BrazeCoreGanttChartProps) {
+  const timelineUnitsContext = useMemo((): TileTimelineUnitsContext | undefined => {
+    if (!enterprisePlanTaskGantt || !planTaskTilesForTimeline?.length) return undefined;
+    return { planTaskTiles: planTaskTilesForTimeline };
+  }, [enterprisePlanTaskGantt, planTaskTilesForTimeline]);
+
   const ganttAnnotationTrackRef = useRef<HTMLDivElement>(null);
   const ganttRailLocalRef = useRef<HTMLDivElement | null>(null);
   const setGanttTimelineRailNode = useCallback(
@@ -1335,7 +1353,9 @@ export function BrazeCoreGanttChart({
   const ganttRows = useMemo(() => {
     if (enterprisePlanTaskGantt) {
       const ids = laneLegend?.map((l) => l.id);
-      return buildGanttRowsForPlanTaskList(visibleGanttTiles, ids?.length ? ids : undefined);
+      const order =
+        ids?.length ? ids : [...new Set(visibleGanttTiles.map((t) => t.Workstream))];
+      return buildGanttPlanTaskRows(visibleGanttTiles, order);
     }
     if (laneLegend?.length) {
       const ids = laneLegend.map((l) => l.id);
@@ -1671,6 +1691,7 @@ export function BrazeCoreGanttChart({
                   explicitWorkstreamLabelTypes={explicitWorkstreamLabelTypes}
                   enterprisePlanTaskGantt={enterprisePlanTaskGantt}
                   useDefaultBrandWorkstreamColors={useDefaultBrandWorkstreamColors}
+                  timelineUnitsContext={timelineUnitsContext}
                 />
               ))
             : (() => {
@@ -1866,6 +1887,7 @@ export function BrazeCoreGanttChart({
                             explicitWorkstreamLabelTypes={explicitWorkstreamLabelTypes}
                             enterprisePlanTaskGantt={enterprisePlanTaskGantt}
                             useDefaultBrandWorkstreamColors={useDefaultBrandWorkstreamColors}
+                            timelineUnitsContext={timelineUnitsContext}
                           />
                         ))}
                       </>

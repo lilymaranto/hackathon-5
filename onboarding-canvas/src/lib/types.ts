@@ -168,6 +168,8 @@ export type TileRecord = {
   ganttMinSpanWeeks?: number;
   /** Enterprise Platinum Gantt: `Y` = user may delete the row. */
   ganttOptional?: "Y" | "N" | "";
+  /** Synthetic plan Gantt milestone: end aligns to anchor bar end (column space). */
+  planGanttMilestoneFlushEnd?: boolean;
 };
 
 /** Mongo `gantt_tasks` collection — Enterprise Platinum plan task rows (separate from swimlane tiles). */

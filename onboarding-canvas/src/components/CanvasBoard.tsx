@@ -40,6 +40,8 @@ import {
   GANTT_TASK_BAR_HEIGHT_PX,
   scaleYpx,
 } from "@/lib/canvas-layout-y";
+import { buildPlanGanttMilestoneTiles, applyMessagingPhaseGanttLayout } from "@/lib/plan-gantt-milestones";
+import { milestoneTileDisplayTitle } from "@/lib/milestone-display-title";
 import { getTileTimelineUnits } from "@/lib/timeline-units";
 import {
   EMPTY_TIMELINE_ANNOTATION_DOC,
@@ -72,6 +74,8 @@ import {
   weekMarksForPlatinumGanttTile,
 } from "@/lib/enterprise-platinum-gantt-week-marks";
 import {
+  planGanttSpanResizeDragColumnCount,
+  planGanttSpanResizeStepPlanWeeks,
   planGanttTimelineColumnCount,
   planGanttTimelineConfig,
   planTabWeekCount,
@@ -561,13 +565,14 @@ function DraggableTile({
     tile.activityLed,
   );
   const milestone = tile.Category === "milestone";
+  const milestoneLabel = milestone ? milestoneTileDisplayTitle(tile) : tile.Title;
   const resolvedLineClamp = lineClamp ?? (normalizedRowSpan(tile.Row_Span) >= 2 ? 4 : 2);
 
   return (
     <button
       ref={setNodeRef}
       onClick={() => onOpen(tile)}
-      title={tile.Title}
+      title={milestoneLabel}
       className={clsx(
         "absolute flex h-7 items-center justify-center overflow-visible rounded-md text-center leading-tight",
         milestone
@@ -599,7 +604,7 @@ function DraggableTile({
             aria-hidden
           />
           <HoverRevealTileText
-            text={tile.Title}
+            text={milestoneLabel}
             className="font-semibold"
             clampLines={resolvedLineClamp}
           />
@@ -636,12 +641,13 @@ function StaticTile({
     tile.activityLed,
   );
   const milestone = tile.Category === "milestone";
+  const milestoneLabel = milestone ? milestoneTileDisplayTitle(tile) : tile.Title;
   const resolvedLineClamp = lineClamp ?? (normalizedRowSpan(tile.Row_Span) >= 2 ? 4 : 2);
 
   return (
     <button
       onClick={() => onOpen(tile)}
-      title={tile.Title}
+      title={milestoneLabel}
       className={clsx(
         "absolute flex h-7 items-center justify-center overflow-visible rounded-md text-center leading-tight",
         milestone
@@ -665,7 +671,7 @@ function StaticTile({
             aria-hidden
           />
           <HoverRevealTileText
-            text={tile.Title}
+            text={milestoneLabel}
             className="font-semibold"
             clampLines={resolvedLineClamp}
           />
@@ -813,12 +819,13 @@ function DraggableAdsMilestoneTile({
 
   const drag = CSS.Translate.toString(transform);
   const lineClamp = normalizedRowSpan(tile.Row_Span) >= 2 ? 4 : 3;
+  const milestoneLabel = milestoneTileDisplayTitle(tile);
 
   return (
     <button
       ref={setNodeRef}
       type="button"
-      title={tile.Title}
+      title={milestoneLabel}
       onClick={() => onOpen(tile)}
       className={clsx(
         "absolute z-[45] flex max-w-[min(240px,46vw)] items-start gap-1.5 rounded-lg border-2 border-white bg-white px-2.5 py-1.5 text-left text-[14px] font-semibold leading-snug outline-none",
@@ -844,7 +851,7 @@ function DraggableAdsMilestoneTile({
         stroke={accentColor}
         aria-hidden
       />
-      <HoverRevealTileText text={tile.Title} clampLines={lineClamp} className="font-semibold" />
+      <HoverRevealTileText text={milestoneLabel} clampLines={lineClamp} className="font-semibold" />
     </button>
   );
 }
@@ -863,10 +870,11 @@ function StaticAdsMilestoneTile({
   caretOnTop?: boolean;
 }) {
   const lineClamp = normalizedRowSpan(tile.Row_Span) >= 2 ? 4 : 3;
+  const milestoneLabel = milestoneTileDisplayTitle(tile);
   return (
     <button
       type="button"
-      title={tile.Title}
+      title={milestoneLabel}
       onClick={() => onOpen(tile)}
       className={clsx(
         "absolute z-[45] flex max-w-[min(240px,46vw)] items-start gap-1.5 rounded-lg border-2 border-white bg-white px-2.5 py-1.5 text-left text-[14px] font-semibold leading-snug outline-none",
@@ -887,7 +895,7 @@ function StaticAdsMilestoneTile({
         stroke={accentColor}
         aria-hidden
       />
-      <HoverRevealTileText text={tile.Title} clampLines={lineClamp} className="font-semibold" />
+      <HoverRevealTileText text={milestoneLabel} clampLines={lineClamp} className="font-semibold" />
     </button>
   );
 }
@@ -1864,15 +1872,52 @@ export function CanvasBoard({
     ],
   );
 
+  const visibleTileState = useMemo(
+    () =>
+      tileState.filter((tile) =>
+        isWorkstreamVisibleForChannels(tile.Workstream, config.channels),
+      ),
+    [tileState, config.channels],
+  );
+
+  const planGanttMilestoneTiles = useMemo(
+    () =>
+      buildPlanGanttMilestoneTiles(
+        config.planOptionId,
+        visibleTileState,
+        config.channels,
+        ganttPlanTileState,
+        config.Config_ID,
+      ),
+    [config.planOptionId, config.Config_ID, visibleTileState, config.channels, ganttPlanTileState],
+  );
+
+  const ganttPlanTilesForView = useMemo(
+    () => applyMessagingPhaseGanttLayout(config.planOptionId, ganttPlanTileState, planGanttMilestoneTiles),
+    [config.planOptionId, ganttPlanTileState, planGanttMilestoneTiles],
+  );
+
+  const ganttVisibleTileState = useMemo(() => {
+    if (usePlatinumPlanGantt) return [...ganttPlanTilesForView, ...planGanttMilestoneTiles];
+    return tiles.filter((tile) => isWorkstreamVisibleForChannels(tile.Workstream, config.channels));
+  }, [
+    usePlatinumPlanGantt,
+    ganttPlanTilesForView,
+    planGanttMilestoneTiles,
+    tiles,
+    config.channels,
+  ]);
+
   const drawerTile = useMemo(() => {
     if (!selectedTile) return null;
     const k = tileStableKey(selectedTile);
     return (
+      ganttVisibleTileState.find((t) => tileStableKey(t) === k) ??
       ganttPlanTileState.find((t) => tileStableKey(t) === k) ??
       tileState.find((t) => tileStableKey(t) === k) ??
       selectedTile
     );
-  }, [selectedTile, tileState, ganttPlanTileState]);
+  }, [selectedTile, tileState, ganttPlanTileState, ganttVisibleTileState]);
 
   const drawerNotesValue = useMemo(() => {
     if (!drawerTile) return "";
@@ -1932,22 +1977,6 @@ export function CanvasBoard({
     }
     return true;
   }, [allowLayoutAndDrawerEdits, customerPasswordView, drawerTile]);
-
-  const visibleTileState = useMemo(
-    () =>
-      tileState.filter((tile) =>
-        isWorkstreamVisibleForChannels(tile.Workstream, config.channels),
-      ),
-    [tileState, config.channels],
-  );
-
-  /**
-   * Braze Core Gantt: Enterprise Platinum uses plan task rows; other plans use swimlane server layout.
-   */
-  const ganttVisibleTileState = useMemo(() => {
-    if (usePlatinumPlanGantt) return ganttPlanTileState;
-    return tiles.filter((tile) => isWorkstreamVisibleForChannels(tile.Workstream, config.channels));
-  }, [usePlatinumPlanGantt, ganttPlanTileState, tiles, config.channels]);
 
   /** Email-scoped rows (DNS/SSL, IT Manager) only when channel is on AND email tiles exist — matches hidden email swimlane when API omits Channel_* or seeds skipped email. */
   const hasEmailWorkstreamTiles = useMemo(
@@ -2339,7 +2368,12 @@ export function CanvasBoard({
       planOptionId: config.planOptionId,
       durationWeeks,
       timelineColumns,
-      spanResizeDragColumns: isPlanGanttView ? planTabWeekCount(config.planOptionId) : undefined,
+      spanResizeDragColumns: isPlanGanttView
+        ? planGanttSpanResizeDragColumnCount(config.planOptionId)
+        : undefined,
+      spanResizeStepPlanWeeks: isPlanGanttView
+        ? planGanttSpanResizeStepPlanWeeks(config.planOptionId)
+        : undefined,
       getTimelineWidthPx: () => timelineWidthRef.current,
       templateSpanWeeksForTile: (t: TileRecord) =>
         serverTemplateSpanByUid.get(tileStableKey(t)) ?? t.Span_Weeks,
@@ -4272,6 +4306,7 @@ export function CanvasBoard({
                     readOnly={false}
                     spanResize={brazeCoreGanttSpanResize}
                     enterprisePlanTaskGantt={usePlatinumPlanGantt}
+                    planTaskTilesForTimeline={ganttPlanTilesForView}
                     laneLegendTitle={usePlatinumPlanGantt ? "Sections" : "Workstreams"}
                     timelineRailRef={timelineRef}
                     laneLegend={brazeCoreGanttLaneLegend}
@@ -4315,6 +4350,7 @@ export function CanvasBoard({
                 readOnly={!usePlatinumPlanGantt || readOnly || customerPasswordView}
                 spanResize={brazeCoreGanttSpanResize}
                 enterprisePlanTaskGantt={usePlatinumPlanGantt}
+                planTaskTilesForTimeline={ganttPlanTilesForView}
                 laneLegendTitle={usePlatinumPlanGantt ? "Sections" : "Workstreams"}
                 timelineRailRef={timelineRef}
                 laneLegend={brazeCoreGanttLaneLegend}

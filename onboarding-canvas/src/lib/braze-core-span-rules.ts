@@ -1,6 +1,7 @@
 import { getTileTimelineUnits } from "@/lib/timeline-units";
 import {
   maxPlanWeekSpanFromStart,
+  planGanttSpanResizeStepPlanWeeks,
   usesPlanTaskGanttWeekGrid,
 } from "@/lib/plan-task-gantt-timeline";
 import type { PlanOptionId, TileRecord } from "@/lib/types";
@@ -109,7 +110,14 @@ export function clampBrazeCoreSpanWeeks(args: {
     ),
   );
   if (maxS < minS) return maxS;
-  return Math.min(maxS, Math.max(minS, Math.round(args.requested)));
+  const quantizeRequested = (value: number): number => {
+    if (usesPlanTaskGanttWeekGrid(args.planOptionId, args.tile)) {
+      const step = planGanttSpanResizeStepPlanWeeks(args.planOptionId);
+      return Math.round(value / step) * step;
+    }
+    return Math.round(value);
+  };
+  return Math.min(maxS, Math.max(minS, quantizeRequested(args.requested)));
 }
 
 const AI_DECISIONING_PLAN: PlanOptionId = "ai_decisioning_studio";

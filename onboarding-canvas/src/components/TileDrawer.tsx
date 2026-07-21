@@ -7,6 +7,11 @@ import {
 } from "@/lib/constants";
 import { isEnterprisePlatinumGanttTile } from "@/lib/enterprise-platinum-gantt";
 import {
+  isPlanGanttMilestoneTile,
+  planGanttMilestoneDrawerTitle,
+} from "@/lib/plan-gantt-milestones";
+import { milestoneTileDisplayTitle } from "@/lib/milestone-display-title";
+import {
   committedBulletTextMatchesLibrary,
   committedResourcesTextMatchesLibrary,
   libraryResourceLinksToEditableText,
@@ -1505,7 +1510,13 @@ export function TileDrawer({
             </p>
             {tile ? (
               <DoubleClickTitleBlock
-                displayTitle={adsChevronDisplayTitle(tile, config.channels)}
+                displayTitle={
+                  tile.Category === "milestone" && isPlanGanttMilestoneTile(tile)
+                    ? planGanttMilestoneDrawerTitle(tile)
+                    : tile.Category === "milestone"
+                      ? milestoneTileDisplayTitle(tile)
+                      : adsChevronDisplayTitle(tile, config.channels)
+                }
                 editTitle={tile.Title}
                 onCommit={onDrawerTitleCommit}
                 readOnly={lockTileCopy}

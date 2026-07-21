@@ -18,6 +18,8 @@ type Props = {
   maxSpanWeeks?: number;
   /** When set, pointer resize steps use this column count (e.g. 28 plan weeks on a 48-col rail). */
   spanResizeDragColumns?: number;
+  /** Plan-week increment per drag step (e.g. `0.5` for half-week on multi-column rails). */
+  spanResizeStepPlanWeeks?: number;
   getTimelineWidthPx: () => number;
   onSpanChange: (nextSpan: number) => void;
   /** Tailwind height class to match the tile bar (`h-10` swimlane, `h-8` gantt). */
@@ -43,6 +45,7 @@ export function BrazeCoreSpanResizeHandle({
   maxSpanWeeks,
   getTimelineWidthPx,
   spanResizeDragColumns,
+  spanResizeStepPlanWeeks = 1,
   onSpanChange,
   heightClass,
   mode = "braze",
@@ -78,7 +81,7 @@ export function BrazeCoreSpanResizeHandle({
       lastSpanRef.current = next;
       onSpanChange(next);
     },
-    [durationWeeks, mode, planOptionId, spanResizeDragColumns, templateSpanWeeks, minSpanWeeks, maxSpanWeeks, tile, timelineColumns, onSpanChange],
+    [durationWeeks, mode, planOptionId, spanResizeDragColumns, spanResizeStepPlanWeeks, templateSpanWeeks, minSpanWeeks, maxSpanWeeks, tile, timelineColumns, onSpanChange],
   );
 
   const onPointerDown = useCallback(
@@ -98,9 +101,10 @@ export function BrazeCoreSpanResizeHandle({
         getTimelineWidthPx() / Math.max(1, spanResizeDragColumns ?? timelineColumns),
       );
 
+      const stepPlanWeeks = spanResizeStepPlanWeeks;
       const onMove = (ev: PointerEvent) => {
-        const deltaWeeks = Math.round((ev.clientX - startXRef.current) / weekW);
-        applySpan(startSpanRef.current + deltaWeeks);
+        const deltaSteps = Math.round((ev.clientX - startXRef.current) / weekW);
+        applySpan(startSpanRef.current + deltaSteps * stepPlanWeeks);
       };
 
       const onUp = (ev: PointerEvent) => {
@@ -110,15 +114,15 @@ export function BrazeCoreSpanResizeHandle({
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
         window.removeEventListener("pointercancel", onUp);
-        const deltaWeeks = Math.round((ev.clientX - startXRef.current) / weekW);
-        applySpan(startSpanRef.current + deltaWeeks);
+        const deltaSteps = Math.round((ev.clientX - startXRef.current) / weekW);
+        applySpan(startSpanRef.current + deltaSteps * stepPlanWeeks);
       };
 
       window.addEventListener("pointermove", onMove);
       window.addEventListener("pointerup", onUp);
       window.addEventListener("pointercancel", onUp);
     },
-    [applySpan, getTimelineWidthPx, tile.Span_Weeks, timelineColumns],
+    [applySpan, getTimelineWidthPx, spanResizeDragColumns, spanResizeStepPlanWeeks, tile.Span_Weeks, timelineColumns],
   );
 
   return (

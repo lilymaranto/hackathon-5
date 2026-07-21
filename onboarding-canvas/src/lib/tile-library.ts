@@ -1,4 +1,5 @@
 import { TileLibraryEntry, TileLibraryLink } from "@/lib/types";
+import { planGanttMilestoneSourceTileId, PLAN_GANTT_BLANK_MILESTONE_PREFIX } from "@/lib/plan-gantt-milestones";
 
 function sess(input: {
   description?: string;
@@ -954,7 +955,12 @@ export function tileLibraryKey(storedTileId: string): string {
 }
 
 export function getTileLibraryEntry(tileId: string): TileLibraryEntry {
-  const base = TILE_LIBRARY[tileLibraryKey(tileId)] ?? defaultTileLibraryEntry;
+  if (tileId.startsWith(PLAN_GANTT_BLANK_MILESTONE_PREFIX)) {
+    return defaultTileLibraryEntry;
+  }
+  const milestoneSource = planGanttMilestoneSourceTileId(tileId);
+  const lookupId = milestoneSource ?? tileId;
+  const base = TILE_LIBRARY[tileLibraryKey(lookupId)] ?? defaultTileLibraryEntry;
   return {
     description: base.description,
     agenda: base.agenda,
