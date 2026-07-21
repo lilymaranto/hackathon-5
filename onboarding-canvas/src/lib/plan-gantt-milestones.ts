@@ -46,11 +46,55 @@ const GROWTH_SILVER_WORKSTREAM_NARROW_MILESTONE_IDS = new Set([
 ]);
 
 const IGNITE_MILESTONE_EXTRA_TIMELINE_COLUMNS = 1;
-const IGNITE_MILESTONE_NO_EXTRA_LANES = new Set<Workstream>(["gantt_audiences", "gantt_analytics"]);
+
+/** Quickstart Gold/Silver plan Gantt: +1 column on these section milestones. */
+const QUICKSTART_GANTT_WIDER_MILESTONE_LANES = new Set<Workstream>([
+  "gantt_data",
+  "gantt_web_mobile",
+]);
+
+function planGanttMilestoneLaneFromTile(
+  milestone: Pick<TileRecord, "Tile_ID" | "Workstream">,
+): Workstream | undefined {
+  if (milestone.Workstream?.startsWith("gantt_")) return milestone.Workstream;
+  if (milestone.Tile_ID.startsWith(PLAN_GANTT_BLANK_MILESTONE_PREFIX)) {
+    return milestone.Tile_ID.slice(PLAN_GANTT_BLANK_MILESTONE_PREFIX.length) as Workstream;
+  }
+  return undefined;
+}
+
+function quickstartGanttMilestoneExtraTimelineColumns(
+  planOptionId: PlanOptionId,
+  milestone: Pick<TileRecord, "Tile_ID" | "Workstream">,
+): number {
+  if (planOptionId !== "quickstart_gold" && planOptionId !== "quickstart_silver") return 0;
+  const lane = planGanttMilestoneLaneFromTile(milestone);
+  return lane && QUICKSTART_GANTT_WIDER_MILESTONE_LANES.has(lane) ? 1 : 0;
+}
 
 /** Default Growth Silver milestone width (8 columns per plan week). */
 export const GROWTH_SILVER_MILESTONE_TIMELINE_COLUMNS = 3;
 export const GROWTH_SILVER_DATA_MILESTONE_TIMELINE_COLUMNS = 5;
+export const GROWTH_SILVER_GANTT_EXTRA_MILESTONE_COLUMNS = 2;
+
+/** Growth Silver plan Gantt only: wider bars on these section milestones. */
+const GROWTH_SILVER_GANTT_WIDER_MILESTONE_LANES = new Set<Workstream>([
+  "gantt_admin",
+  "gantt_tech",
+  "gantt_email",
+  "gantt_sms",
+  "gantt_whatsapp",
+  "gantt_messaging",
+]);
+
+function growthSilverGanttMilestoneExtraTimelineColumns(
+  milestone: Pick<TileRecord, "Tile_ID" | "Workstream">,
+): number {
+  const lane = planGanttMilestoneLaneFromTile(milestone);
+  return lane && GROWTH_SILVER_GANTT_WIDER_MILESTONE_LANES.has(lane)
+    ? GROWTH_SILVER_GANTT_EXTRA_MILESTONE_COLUMNS
+    : 0;
+}
 
 const GROWTH_SILVER_DATA_MILESTONE_IDS = new Set(["data_planning_complete", "data_complete"]);
 
@@ -99,15 +143,7 @@ export function isEmailSetupCompletePlanGanttMilestone(tile: Pick<TileRecord, "T
 function igniteMilestoneEligibleForExtraColumn(
   tile: Pick<TileRecord, "Tile_ID" | "Category" | "Workstream">,
 ): boolean {
-  if (tile.Category !== "milestone" && !isPlanGanttMilestoneTile(tile)) return false;
-  if (tile.Workstream && IGNITE_MILESTONE_NO_EXTRA_LANES.has(tile.Workstream)) return false;
-  if (
-    tile.Tile_ID.includes(`${PLAN_GANTT_BLANK_MILESTONE_PREFIX}gantt_audiences`) ||
-    tile.Tile_ID.includes(`${PLAN_GANTT_BLANK_MILESTONE_PREFIX}gantt_analytics`)
-  ) {
-    return false;
-  }
-  return true;
+  return tile.Category === "milestone" || isPlanGanttMilestoneTile(tile);
 }
 
 /** Extra Gantt / timeline columns beyond span (plan-specific layout tweaks). */
@@ -127,6 +163,8 @@ export function planGanttMilestoneExtraTimelineEndColumns(
   ) {
     return IGNITE_MILESTONE_EXTRA_TIMELINE_COLUMNS;
   }
+  const quickstartExtra = quickstartGanttMilestoneExtraTimelineColumns(planOptionId, tile);
+  if (quickstartExtra > 0) return quickstartExtra;
   return 0;
 }
 
@@ -338,16 +376,52 @@ function planGanttMilestoneSpanWeeks(planOptionId: PlanOptionId): number {
   return isEnterprisePlatinumOrGold(planOptionId) ? 2 : 1;
 }
 
+/** +1 plan week on Enterprise Platinum/Gold Gantt for these section milestones. */
+const ENTERPRISE_PLAT_GOLD_GANTT_EXTENDED_MILESTONE_LANES = new Set<Workstream>([
+  "gantt_admin",
+  "gantt_data",
+  "gantt_tech",
+  "gantt_messaging",
+  "gantt_whatsapp",
+  "gantt_web_mobile",
+]);
+
+function enterprisePlatGoldGanttMilestoneLane(
+  milestone: Pick<TileRecord, "Tile_ID" | "Workstream">,
+): Workstream | undefined {
+  const lane = planGanttMilestoneLaneFromTile(milestone);
+  if (lane && ENTERPRISE_PLAT_GOLD_GANTT_EXTENDED_MILESTONE_LANES.has(lane)) return lane;
+  return undefined;
+}
+
+function enterprisePlatGoldGanttMilestoneExtraPlanWeeks(
+  milestone: Pick<TileRecord, "Tile_ID" | "Workstream">,
+): number {
+  return enterprisePlatGoldGanttMilestoneLane(milestone) ? 1 : 0;
+}
+
+function planGanttMilestoneDesiredSpanPlanWeeks(
+  planOptionId: PlanOptionId,
+  milestone: Pick<TileRecord, "Tile_ID" | "Workstream">,
+): number {
+  const base = planGanttMilestoneSpanWeeks(planOptionId);
+  if (!isEnterprisePlatinumOrGold(planOptionId)) return base;
+  return base + enterprisePlatGoldGanttMilestoneExtraPlanWeeks(milestone);
+}
+
 /** Milestone bar width in timeline columns for plan-task Gantt. */
 export function planGanttMilestoneColumnSpan(
   planOptionId: PlanOptionId,
   milestone: Pick<TileRecord, "Tile_ID" | "Category" | "Workstream">,
 ): number {
   if (planOptionId === "growth_silver") {
-    return growthSilverMilestoneTimelineColumnSpan(milestone);
+    return (
+      growthSilverMilestoneTimelineColumnSpan(milestone) +
+      growthSilverGanttMilestoneExtraTimelineColumns(milestone)
+    );
   }
-  const baseSpanWeeks = planGanttMilestoneSpanWeeks(planOptionId);
-  const units = planWeekRangeToTimelineUnits(planOptionId, 1, baseSpanWeeks);
+  const spanWeeks = planGanttMilestoneDesiredSpanPlanWeeks(planOptionId, milestone);
+  const units = planWeekRangeToTimelineUnits(planOptionId, 1, spanWeeks);
   const extra = planGanttMilestoneExtraTimelineEndColumns(planOptionId, milestone);
   return units.endUnit - units.startUnit + 1 + extra;
 }
@@ -410,8 +484,9 @@ function milestoneWeeksFromAnchor(
   anchor: TileRecord,
   planOptionId: PlanOptionId,
   flushToTimelineEnd: boolean,
+  milestone: Pick<TileRecord, "Tile_ID" | "Workstream">,
 ): { startWeek: number; spanWeeks: number } {
-  const desiredSpan = planGanttMilestoneSpanWeeks(planOptionId);
+  const desiredSpan = planGanttMilestoneDesiredSpanPlanWeeks(planOptionId, milestone);
   const maxWeek = planTabWeekCount(planOptionId);
   if (flushToTimelineEnd) {
     const spanWeeks = Math.min(Math.max(1, desiredSpan), maxWeek);
@@ -430,7 +505,13 @@ function cloneMilestoneForPlanGantt(
 ): TileRecord {
   const baseId = source.Tile_ID.replace(/^.*__/, "").split("__").pop() ?? source.Tile_ID;
   const tileId = `${PLAN_GANTT_MILESTONE_TILE_PREFIX}${baseId}`;
-  const { startWeek, spanWeeks } = milestoneWeeksFromAnchor(anchor, planOptionId, flushToTimelineEnd);
+  const milestoneMeta = { Tile_ID: tileId, Workstream: lane };
+  const { startWeek, spanWeeks } = milestoneWeeksFromAnchor(
+    anchor,
+    planOptionId,
+    flushToTimelineEnd,
+    milestoneMeta,
+  );
   return {
     ...source,
     Tile_ID: tileId,
@@ -453,7 +534,16 @@ function blankPlaceholderMilestone(
   flushToTimelineEnd: boolean,
 ): TileRecord {
   const label = platinumGanttSectionLabelForLane(lane);
-  const { startWeek, spanWeeks } = milestoneWeeksFromAnchor(anchor, planOptionId, flushToTimelineEnd);
+  const milestoneMeta = {
+    Tile_ID: `${PLAN_GANTT_BLANK_MILESTONE_PREFIX}${lane}`,
+    Workstream: lane,
+  };
+  const { startWeek, spanWeeks } = milestoneWeeksFromAnchor(
+    anchor,
+    planOptionId,
+    flushToTimelineEnd,
+    milestoneMeta,
+  );
   return {
     Config_ID: configId,
     Tile_ID: `${PLAN_GANTT_BLANK_MILESTONE_PREFIX}${lane}`,
