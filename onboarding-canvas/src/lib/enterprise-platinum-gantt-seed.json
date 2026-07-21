@@ -666,7 +666,7 @@
   {
     "taskKey": "build_sms_messages",
     "taskName": "Build SMS Messages",
-    "section": "Configure Opt-In & Opt-Out Keywords",
+    "section": "SMS",
     "workstream": "gantt_sms",
     "optional": "Y",
     "description": "With sending numbers provisioned and subscription groups configured, your marketing team can begin building the SMS messages that will power your priority campaigns and journeys in Braze.",
@@ -687,7 +687,7 @@
   {
     "taskKey": "set_up_quiet_hours",
     "taskName": "Set Up Quiet Hours",
-    "section": "Configure Opt-In & Opt-Out Keywords",
+    "section": "SMS",
     "workstream": "gantt_sms",
     "optional": "Y",
     "description": "Quiet hours define a no-send window during which messages are either suppressed or delayed, protecting your customers from receiving texts outside of acceptable hours and ensuring your programme remains compliant with regulations governing SMS send times.",
