@@ -281,15 +281,18 @@ function milestoneAnchorCandidates(
 ): TileRecord[] {
   const bars = laneTasks.filter(isPlanTaskBar);
 
-  if (lane === MESSAGING_GANTT_LANE && laneHasTaskTouchingTimelineEnd(bars, planOptionId)) {
-    return bars;
-  }
-
   if (lane === MESSAGING_GANTT_LANE) {
     const phase1 = bars.filter(isMessagingPhase1PlanTask);
-    if (phase1.length && swimlaneMilestone && isJourneysLiveSwimlaneMilestone(swimlaneMilestone)) {
+    const isJourneysLive = swimlaneMilestone && isJourneysLiveSwimlaneMilestone(swimlaneMilestone);
+    
+    if (isJourneysLive && phase1.length) {
       return phase1;
     }
+
+    if (laneHasTaskTouchingTimelineEnd(bars, planOptionId)) {
+      return bars;
+    }
+
     return bars.filter((t) => !isMessagingPhase2PlanTask(t));
   }
 

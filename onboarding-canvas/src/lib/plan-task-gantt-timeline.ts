@@ -39,6 +39,7 @@ export function planGanttColumnsPerPlanWeek(planOptionId: PlanOptionId): number 
 
 /** Plan Gantt resize can snap to half a plan week when the rail has multiple columns per week. */
 export function planGanttSupportsHalfWeekSpanResize(planOptionId: PlanOptionId): boolean {
+  if (planOptionId === "quickstart_silver" || planOptionId === "quickstart_gold") return true;
   return planGanttColumnsPerPlanWeek(planOptionId) > 1;
 }
 
