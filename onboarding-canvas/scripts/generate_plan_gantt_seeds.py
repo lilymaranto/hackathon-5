@@ -52,6 +52,17 @@ PLAN_SHEETS: dict[str, str] = {
     "growth_silver": "Growth Silver Plan",
 }
 
+SMS_TASK_ORDER = [
+    "set_up_long_code",
+    "set_up_short_code",
+    "migrate_codes_from_existing_provider",
+    "configure_opt_in_opt_out_keywords",
+    "set_up_quiet_hours",
+    "build_sms_messages",
+]
+
+SMS_SUBSECTIONS = {"Configure Opt-In & Opt-Out Keywords"}
+
 
 def slug(name: str) -> str:
     s = re.sub(r"\([^)]*\)", "", name)
@@ -171,6 +182,8 @@ def parse_plan_sheet(read_sheet, sheet_name: str):
         sec = section or ""
         if sec == "Administer/Platform Governance":
             sec = "Project Management & Governance"
+        if sec in SMS_SUBSECTIONS:
+            sec = "SMS"
 
         parsed.append(
             {
@@ -257,6 +270,53 @@ def rows_from_plan_tasks(
     return rows_out
 
 
+def normalize_sms_rows(rows: list[dict], by_name: dict[str, dict]) -> list[dict]:
+    sms_indices = [i for i, row in enumerate(rows) if row.get("workstream") == "gantt_sms"]
+    if not sms_indices:
+        return rows
+
+    first_sms = sms_indices[0]
+    last_sms = sms_indices[-1]
+    sms_rows = [deepcopy(row) for row in rows[first_sms : last_sms + 1]]
+
+    for row in sms_rows:
+        row["section"] = "SMS"
+
+    keys = {row["taskKey"] for row in sms_rows}
+    if "configure_opt_in_opt_out_keywords" not in keys and "build_sms_messages" in keys:
+        base = by_name.get("Configure Opt-In & Opt-Out Keywords")
+        build = next(row for row in sms_rows if row["taskKey"] == "build_sms_messages")
+        opt_in = deepcopy(base) if base else {
+            "taskKey": "configure_opt_in_opt_out_keywords",
+            "taskName": "Configure Opt-In & Opt-Out Keywords",
+            "section": "SMS",
+            "workstream": "gantt_sms",
+            "optional": "Y",
+            "description": "",
+            "requiredStakeholders": "",
+            "desiredOutcomes": "",
+            "resources": "",
+            "levelOfEffort": "",
+            "startWeek": build["startWeek"],
+            "spanWeeks": 1,
+            "minSpanWeeks": 1,
+        }
+        opt_in["taskKey"] = "configure_opt_in_opt_out_keywords"
+        opt_in["taskName"] = "Configure Opt-In & Opt-Out Keywords"
+        opt_in["section"] = "SMS"
+        opt_in["workstream"] = "gantt_sms"
+        opt_in.setdefault("weekMarks", {str(build["startWeek"]): "1"})
+        layout = layout_from_marks(opt_in["weekMarks"])
+        if layout:
+            opt_in["startWeek"], opt_in["spanWeeks"], opt_in["minSpanWeeks"] = layout
+        sms_rows.append(opt_in)
+
+    order_index = {key: idx for idx, key in enumerate(SMS_TASK_ORDER)}
+    sms_rows.sort(key=lambda row: order_index.get(row["taskKey"], 999))
+
+    return rows[:first_sms] + sms_rows + rows[last_sms + 1 :]
+
+
 def main() -> None:
     legacy_platinum = json.loads(PLATINUM_SEED.read_text())
     by_name = metadata_lookup(legacy_platinum)
@@ -264,6 +324,7 @@ def main() -> None:
 
     platinum_weeks, platinum_tasks = parse_plan_sheet(read_sheet, PLATINUM_PLAN_SHEET)
     platinum_rows = rows_from_plan_tasks(platinum_tasks, by_name, "12_week")
+    platinum_rows = normalize_sms_rows(platinum_rows, by_name)
     PLATINUM_SEED.write_text(json.dumps(platinum_rows, indent=2) + "\n")
     print("platinum weeks", platinum_weeks, "tasks", len(platinum_rows), "->", PLATINUM_SEED)
 
@@ -273,6 +334,7 @@ def main() -> None:
     for plan_id, sheet in PLAN_SHEETS.items():
         week_count, tasks = parse_plan_sheet(read_sheet, sheet)
         rows_out = rows_from_plan_tasks(tasks, by_name, plan_id)
+        rows_out = normalize_sms_rows(rows_out, by_name)
         out[plan_id] = {"timelineWeeks": week_count, "rows": rows_out}
         print(plan_id, "weeks", week_count, "tasks", len(rows_out))
 

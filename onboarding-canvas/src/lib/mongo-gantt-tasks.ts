@@ -1,8 +1,4 @@
-import {
-  ganttLaneForSection,
-  getGanttSeedForPlan,
-  mongoDocFromGanttSeed,
-} from "@/lib/enterprise-platinum-gantt";
+import { ganttLaneForSection, getGanttSeedForPlan, mongoDocFromGanttSeed } from "@/lib/enterprise-platinum-gantt";
 import { getMongoCollections } from "@/lib/mongodb";
 import type { GanttTaskRecord, PlanOptionId, Workstream } from "@/lib/types";
 
@@ -109,14 +105,34 @@ export async function ensureGanttTasksSeeded(
   if (existing.length > 0 && !keysMatch) {
     await ganttTasks.deleteMany({ Config_ID: configId });
   } else if (existing.length > 0) {
-    return 0;
+    let synced = 0;
+    const stackByWorkstream = new Map<string, number>();
+    for (const row of seed) {
+      const lane = row.workstream;
+      const nextStack = (stackByWorkstream.get(lane) ?? 0) + 1;
+      stackByWorkstream.set(lane, nextStack);
+      const storedStack = await ganttTasks.findOne({
+        Config_ID: configId,
+        Task_Key: row.taskKey,
+      });
+      if (!storedStack) continue;
+      const curStack = Math.max(1, Math.round(toNumber(storedStack.Stack_Order, 1)));
+      if (curStack !== nextStack) {
+        await ganttTasks.updateOne(
+          { Config_ID: configId, Task_Key: row.taskKey },
+          { $set: { Stack_Order: nextStack } },
+        );
+        synced += 1;
+      }
+    }
+    return synced;
   }
 
-  const stackBySection = new Map<string, number>();
+  const stackByWorkstream = new Map<string, number>();
   const docs = seed.map((row) => {
-    const section = row.section;
-    const next = (stackBySection.get(section) ?? 0) + 1;
-    stackBySection.set(section, next);
+    const lane = row.workstream;
+    const next = (stackByWorkstream.get(lane) ?? 0) + 1;
+    stackByWorkstream.set(lane, next);
     return mongoDocFromGanttSeed(configId, row, next);
   });
   if (docs.length === 0) return 0;

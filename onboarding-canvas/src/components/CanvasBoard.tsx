@@ -70,6 +70,7 @@ import {
   type EnterprisePlatinumGanttLaneId,
 } from "@/lib/enterprise-platinum-gantt";
 import {
+  layoutFromPlatinumWeekMarks,
   platinumGanttTaskLayoutEditable,
   weekMarksForPlatinumGanttTile,
 } from "@/lib/enterprise-platinum-gantt-week-marks";
@@ -2365,10 +2366,18 @@ export function CanvasBoard({
         ? planGanttSpanResizeStepPlanWeeks(config.planOptionId)
         : undefined,
       getTimelineWidthPx: () => timelineWidthRef.current,
-      templateSpanWeeksForTile: (t: TileRecord) =>
-        serverTemplateSpanByUid.get(tileStableKey(t)) ?? t.Span_Weeks,
-      minSpanWeeksForTile: (t: TileRecord) =>
-        t.ganttMinSpanWeeks && t.ganttMinSpanWeeks > 0 ? t.ganttMinSpanWeeks : undefined,
+      templateSpanWeeksForTile: (t: TileRecord) => {
+        const marks = weekMarksForPlatinumGanttTile(t.Tile_ID, config.planOptionId);
+        const fromMarks = marks ? layoutFromPlatinumWeekMarks(marks) : null;
+        if (fromMarks) return fromMarks.spanWeeks;
+        return serverTemplateSpanByUid.get(tileStableKey(t)) ?? t.Span_Weeks;
+      },
+      minSpanWeeksForTile: (t: TileRecord) => {
+        const marks = weekMarksForPlatinumGanttTile(t.Tile_ID, config.planOptionId);
+        const fromMarks = marks ? layoutFromPlatinumWeekMarks(marks) : null;
+        if (fromMarks) return fromMarks.minSpanWeeks;
+        return t.ganttMinSpanWeeks && t.ganttMinSpanWeeks > 0 ? t.ganttMinSpanWeeks : undefined;
+      },
       onSpanChange: (t: TileRecord, span: number) => {
         const uid = tileStableKey(t);
         if (t.Span_Weeks === span) return;

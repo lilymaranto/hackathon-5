@@ -87,13 +87,13 @@ export const MEETINGS_SHEET_BY_TILE_TITLE: Record<string, MeetingsSheetContent> 
     "description": "A session to walk you through SMS compliance and best practices and the SMS provisioning process and requirements",
     "attendees": "Project Manager\nMarketing Lead\nMarketing End-User(s)\nLegal / Compliance (Optional)",
     "agendaOutcomes": "Determine number strategy (long code, short code, or migration)\nKick off provisioning and regulatory registration (10DLC, etc.)\nDiscuss subscription groups and opt-in/opt-out approach\nReview quiet hours and compliance requirements\nConfirm timelines given carrier lead times",
-    "relatedTasks": "Set Up Long Code\nSet Up Short Code\nMigrate Codes from Existing Provider\nConfigure Opt-In & Opt-Out Keywords\nBuild SMS Messages\nSet Up Quiet Hours"
+    "relatedTasks": "Set Up Long Code\nSet Up Short Code\nMigrate Codes from Existing Provider\nConfigure Opt-In & Opt-Out Keywords\nSet Up Quiet Hours\nBuild SMS Messages"
   },
   "SMS Enablement": {
     "description": "A follow-up session once provisioning is progressing, focused on building the SMS messages, finalising keyword and compliance configuration, and preparing for launch, including migration cutover if applicable.",
     "attendees": "Project Manager\nMarketing Lead\nMarketing End-User(s)\nLegal / Compliance (Optional)",
     "agendaOutcomes": "Review SMS messages for P1 campaigns\nFinalise opt-in/opt-out keyword configuration and responses\nConfirm quiet hours settings\nPlan migration cutover (if migrating)\nReview testing approach",
-    "relatedTasks": "Set Up Long Code\nSet Up Short Code\nMigrate Codes from Existing Provider\nConfigure Opt-In & Opt-Out Keywords\nBuild SMS Messages\nSet Up Quiet Hours"
+    "relatedTasks": "Set Up Long Code\nSet Up Short Code\nMigrate Codes from Existing Provider\nConfigure Opt-In & Opt-Out Keywords\nSet Up Quiet Hours\nBuild SMS Messages"
   },
   "WhatsApp Discovery Workshop": {
     "description": "A session to initiate the WhatsApp channel workstream, focussed on the account setup and verification tasks, including phone number procurement and the Meta Business Account requirements.",

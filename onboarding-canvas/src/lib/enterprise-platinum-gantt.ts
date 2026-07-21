@@ -182,11 +182,22 @@ export function usesPlanTaskGantt(planOptionId: PlanOptionId): boolean {
   return (PLAN_TASK_GANTT_PLAN_IDS as readonly string[]).includes(planOptionId);
 }
 
+function dedupeGanttSeedRows(rows: EnterprisePlatinumGanttSeedRow[]): EnterprisePlatinumGanttSeedRow[] {
+  const seen = new Set<string>();
+  const out: EnterprisePlatinumGanttSeedRow[] = [];
+  for (const row of rows) {
+    if (seen.has(row.taskKey)) continue;
+    seen.add(row.taskKey);
+    out.push(row);
+  }
+  return out;
+}
+
 export function getGanttSeedForPlan(planOptionId: PlanOptionId): EnterprisePlatinumGanttSeedRow[] {
   if (planOptionId === "12_week") {
-    return ENTERPRISE_PLATINUM_GANTT_SEED;
+    return dedupeGanttSeedRows(ENTERPRISE_PLATINUM_GANTT_SEED);
   }
-  return PLAN_GANTT_SEEDS_BY_PLAN[planOptionId]?.rows ?? [];
+  return dedupeGanttSeedRows(PLAN_GANTT_SEEDS_BY_PLAN[planOptionId]?.rows ?? []);
 }
 
 /** Week-column count from the plan tab (Excel plan weeks). Undefined for Enterprise Platinum/Gold → use 56-column swimlane grid. */

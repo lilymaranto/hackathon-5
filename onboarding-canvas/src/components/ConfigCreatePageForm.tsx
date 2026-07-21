@@ -164,22 +164,31 @@ export function ConfigCreatePageForm() {
             placeholder="Prospect Name"
           />
         </label>
-        <label className="flex flex-col gap-1 text-xs font-semibold text-[#2c1650]">
-          <span className="inline-flex w-fit items-center gap-0.5">
-            Industry <span className="text-[#cf3a50]">*</span>
-          </span>
-          <select
-            value={industry}
-            onChange={(event) => setIndustry(event.target.value as IndustryType)}
-            className="rounded-lg border border-[#d4c9f6] px-3 py-2 text-xs font-normal outline-none focus:border-[#8b30e7]"
-          >
-            {INDUSTRY_OPTIONS.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
-        </label>
+        {!isAiDecisioningStudio ? (
+          <label className="flex flex-col gap-1 text-xs font-semibold text-[#2c1650]">
+            <span className="inline-flex w-fit items-center gap-0.5">
+              Plan Package <span className="text-[#cf3a50]">*</span>
+            </span>
+            <PlanTimelineSelect value={planOptionId} onChange={setPlanOptionId} size="sm" />
+          </label>
+        ) : (
+          <label className="flex flex-col gap-1 text-xs font-semibold text-[#2c1650]">
+            <span className="inline-flex w-fit items-center gap-0.5">
+              Industry <span className="text-[#cf3a50]">*</span>
+            </span>
+            <select
+              value={industry}
+              onChange={(event) => setIndustry(event.target.value as IndustryType)}
+              className="rounded-lg border border-[#d4c9f6] px-3 py-2 text-xs font-normal outline-none focus:border-[#8b30e7]"
+            >
+              {INDUSTRY_OPTIONS.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="flex flex-col gap-1 text-xs font-semibold text-[#2c1650]">
           <span className="inline-flex w-fit items-center gap-0.5">
             Braze Product <span className="text-[#cf3a50]">*</span>
@@ -199,9 +208,19 @@ export function ConfigCreatePageForm() {
         {!isAiDecisioningStudio ? (
           <label className="flex flex-col gap-1 text-xs font-semibold text-[#2c1650]">
             <span className="inline-flex w-fit items-center gap-0.5">
-              Plan Package <span className="text-[#cf3a50]">*</span>
+              Industry <span className="text-[#cf3a50]">*</span>
             </span>
-            <PlanTimelineSelect value={planOptionId} onChange={setPlanOptionId} size="sm" />
+            <select
+              value={industry}
+              onChange={(event) => setIndustry(event.target.value as IndustryType)}
+              className="rounded-lg border border-[#d4c9f6] px-3 py-2 text-xs font-normal outline-none focus:border-[#8b30e7]"
+            >
+              {INDUSTRY_OPTIONS.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
           </label>
         ) : null}
         <fieldset className="rounded-md border border-[#e8dff9] bg-[#faf8ff] p-3 md:col-span-2">

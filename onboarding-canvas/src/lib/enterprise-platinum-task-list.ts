@@ -362,16 +362,6 @@ export const ENTERPRISE_PLATINUM_TASKS: EnterprisePlatinumTaskRow[] = [
   },
   {
     "section": "SMS",
-    "taskName": "Build SMS Messages",
-    "optional": "Y",
-    "description": "With sending numbers provisioned and subscription groups configured, your marketing team can begin building the SMS messages that will power your priority campaigns and journeys in Braze.",
-    "requiredStakeholders": "Marketing End-User(s): primary owner; builds and tests SMS messages in the Braze dashboard\nMarketing Lead: defines which message types are needed and reviews against brand and compliance standards",
-    "desiredOutcomes": "All SMS messages required for campaign launches are built, tested, and approved in Braze before go-live",
-    "resources": "https://www.braze.com/docs/user_guide/channels/sms_mms_and_rcs/create",
-    "levelOfEffort": "Medium"
-  },
-  {
-    "section": "SMS",
     "taskName": "Set Up Quiet Hours",
     "optional": "Y",
     "description": "Quiet hours define a no-send window during which messages are either suppressed or delayed, protecting your customers from receiving texts outside of acceptable hours and ensuring your programme remains compliant with regulations governing SMS send times.",
@@ -379,6 +369,16 @@ export const ENTERPRISE_PLATINUM_TASKS: EnterprisePlatinumTaskRow[] = [
     "desiredOutcomes": "Quiet hours are configured for every region you send in, ensuring no customer receives an SMS outside of appropriate hours regardless of when a campaign is triggered",
     "resources": "https://www.braze.com/docs/user_guide/messaging/messaging_fundamentals/quiet_hours",
     "levelOfEffort": "Low"
+  },
+  {
+    "section": "SMS",
+    "taskName": "Build SMS Messages",
+    "optional": "Y",
+    "description": "With sending numbers provisioned and subscription groups configured, your marketing team can begin building the SMS messages that will power your priority campaigns and journeys in Braze.",
+    "requiredStakeholders": "Marketing End-User(s): primary owner; builds and tests SMS messages in the Braze dashboard\nMarketing Lead: defines which message types are needed and reviews against brand and compliance standards",
+    "desiredOutcomes": "All SMS messages required for campaign launches are built, tested, and approved in Braze before go-live",
+    "resources": "https://www.braze.com/docs/user_guide/channels/sms_mms_and_rcs/create",
+    "levelOfEffort": "Medium"
   },
   {
     "section": "WhatsApp",

@@ -9,7 +9,6 @@ import {
   resolvePlanGanttMilestoneTimelineUnits,
 } from "@/lib/plan-gantt-milestones";
 import {
-  planGanttTimelineColumnCount,
   planWeekRangeToTimelineUnits,
   usesPlanTaskGanttWeekGrid,
 } from "@/lib/plan-task-gantt-timeline";
@@ -44,13 +43,7 @@ export function getTileTimelineUnits(
       if (anchored) return anchored;
     }
 
-    const units = planWeekRangeToTimelineUnits(planOptionId, tile.Start_Week, tile.Span_Weeks);
-    const extraEnd = planGanttMilestoneExtraTimelineEndColumns(planOptionId, tile);
-    if (extraEnd > 0) {
-      const total = planGanttTimelineColumnCount(planOptionId);
-      return { ...units, endUnit: Math.min(total, units.endUnit + extraEnd) };
-    }
-    return units;
+    return planWeekRangeToTimelineUnits(planOptionId, tile.Start_Week, tile.Span_Weeks);
   }
   if (planOptionId === "growth_silver") {
     const s = tile.Start_Week;
