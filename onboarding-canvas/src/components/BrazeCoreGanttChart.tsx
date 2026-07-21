@@ -1195,17 +1195,6 @@ function BrazeCoreGanttActivityRow({
                 )
               }
             >
-              <span
-                className="min-w-0 flex-1 text-left text-[13px] font-bold leading-snug tracking-wide drop-shadow-sm"
-                style={{ color: leftRailLabelColor }}
-                onDoubleClick={(e) => {
-                  cancelDeferredSingleClick(headerClickTimerRef);
-                  e.stopPropagation();
-                  brazeExpandedFirstRowChrome.onLabelDoubleClick?.();
-                }}
-              >
-                {brazeExpandedFirstRowChrome.label}
-              </span>
               <button
                 type="button"
                 className="flex shrink-0 items-center justify-center rounded-md p-0.5 text-current hover:bg-black/10"
@@ -1217,8 +1206,19 @@ function BrazeCoreGanttActivityRow({
                   brazeExpandedFirstRowChrome.onCollapse();
                 }}
               >
-                <ChevronDown className="h-4 w-4 shrink-0" aria-hidden />
+                <ChevronDown className="h-5 w-5 shrink-0" aria-hidden />
               </button>
+              <span
+                className="min-w-0 flex-1 text-left text-[13px] font-bold leading-snug tracking-wide drop-shadow-sm"
+                style={{ color: leftRailLabelColor }}
+                onDoubleClick={(e) => {
+                  cancelDeferredSingleClick(headerClickTimerRef);
+                  e.stopPropagation();
+                  brazeExpandedFirstRowChrome.onLabelDoubleClick?.();
+                }}
+              >
+                {brazeExpandedFirstRowChrome.label}
+              </span>
             </div>
             <div
               className="h-px w-full shrink-0"
@@ -1436,6 +1436,24 @@ export function BrazeCoreGanttChart({
     });
   }, []);
 
+  const allBrazeWorkstreamsExpanded = useMemo(() => {
+    if (!orderedBrazeWorkstreamSections?.length) return false;
+    return orderedBrazeWorkstreamSections.every((section) =>
+      expandedBrazeWorkstreams.has(section.workstream),
+    );
+  }, [orderedBrazeWorkstreamSections, expandedBrazeWorkstreams]);
+
+  const toggleAllBrazeWorkstreamSections = useCallback(() => {
+    if (!orderedBrazeWorkstreamSections?.length) return;
+    if (allBrazeWorkstreamsExpanded) {
+      setExpandedBrazeWorkstreams(new Set());
+      return;
+    }
+    setExpandedBrazeWorkstreams(
+      new Set(orderedBrazeWorkstreamSections.map((section) => section.workstream)),
+    );
+  }, [allBrazeWorkstreamsExpanded, orderedBrazeWorkstreamSections]);
+
   const showColumnGuides = showMonthsRow || planOptionId === "growth_silver";
   const timelineGuideStyle = useMemo(() => {
     if (!showColumnGuides) return undefined;
@@ -1587,8 +1605,32 @@ export function BrazeCoreGanttChart({
         >
           <div className="min-w-[min(100%,720px)]">
           <div className="grid grid-cols-[minmax(12rem,16rem)_1fr] border-b border-[#E8E5F8]">
-            <div className="border-r border-[#E8E5F8] px-3 py-3 text-base font-semibold text-[#300266]">
-              Activity
+            <div className="flex items-center gap-2 border-r border-[#E8E5F8] px-3 py-3 text-base font-semibold text-[#300266]">
+              {useBrazeGanttSectionBlocks && orderedBrazeWorkstreamSections && (
+                <button
+                  type="button"
+                  className="flex shrink-0 items-center justify-center rounded-md p-1 text-[#6B5A9A] hover:bg-[#E8E5F8] hover:text-[#300266]"
+                  aria-expanded={allBrazeWorkstreamsExpanded}
+                  aria-label={
+                    allBrazeWorkstreamsExpanded
+                      ? "Collapse all workstream sections"
+                      : "Expand all workstream sections"
+                  }
+                  title={
+                    allBrazeWorkstreamsExpanded
+                      ? "Collapse all sections"
+                      : "Expand all sections"
+                  }
+                  onClick={toggleAllBrazeWorkstreamSections}
+                >
+                  {allBrazeWorkstreamsExpanded ? (
+                    <ChevronDown className="h-5 w-5 shrink-0" aria-hidden />
+                  ) : (
+                    <ChevronRight className="h-5 w-5 shrink-0" aria-hidden />
+                  )}
+                </button>
+              )}
+              <span>Activity</span>
             </div>
             <div
               ref={setGanttTimelineRailNode}

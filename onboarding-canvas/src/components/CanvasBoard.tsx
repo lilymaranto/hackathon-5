@@ -2290,21 +2290,11 @@ export function CanvasBoard({
     workstreamLaneColorOverrides,
   ]);
 
-  const milestoneKeySwatchHue = useMemo(
-    () =>
-      workstreamLaneColorOverrides?.get("campaign") ??
-      WORKSTREAMS.find((w) => w.id === "campaign")?.color ??
-      "#801ED7",
-    [workstreamLaneColorOverrides],
-  );
-
   const brazeCoreKeyMilestoneStarHue = useMemo(
-    () => milestoneAccentHexFromConfig(config) ?? milestoneKeySwatchHue,
-    [
-      config.onboardingSessionTileColor,
-      config.customerActivityTileColor,
-      milestoneKeySwatchHue,
-    ],
+    () =>
+      milestoneAccentHexFromConfig(config) ??
+      resolveTileCategoryColorsFromConfig(config).onboardingBg,
+    [config.onboardingSessionTileColor, config.customerActivityTileColor],
   );
 
   const originalLayoutByUid = useMemo(
