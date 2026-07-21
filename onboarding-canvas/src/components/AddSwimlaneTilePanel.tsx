@@ -20,8 +20,8 @@ type Props = {
     title: string;
     description: string;
     attendees: string;
-    resources: string;
-    desiredOutcomes: string;
+    agendaOutcomes: string;
+    relatedTasks: string;
     category: Extract<TileCategory, "customer_activity" | "onboarding_session">;
   }) => Promise<boolean>;
 };
@@ -76,8 +76,8 @@ export function AddSwimlaneTilePanel({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [attendees, setAttendees] = useState("");
-  const [resources, setResources] = useState("");
-  const [desiredOutcomes, setDesiredOutcomes] = useState("");
+  const [agendaOutcomes, setAgendaOutcomes] = useState("");
+  const [relatedTasks, setRelatedTasks] = useState("");
   const [category, setCategory] = useState<Extract<TileCategory, "customer_activity" | "onboarding_session">>(
     "customer_activity",
   );
@@ -87,8 +87,8 @@ export function AddSwimlaneTilePanel({
     setTitle("");
     setDescription("");
     setAttendees("");
-    setResources("");
-    setDesiredOutcomes("");
+    setAgendaOutcomes("");
+    setRelatedTasks("");
     setCategory("customer_activity");
     setError(null);
   }, []);
@@ -112,8 +112,8 @@ export function AddSwimlaneTilePanel({
       title: t,
       description: description.trim(),
       attendees: attendees.trim(),
-      resources: resources.trim(),
-      desiredOutcomes: desiredOutcomes.trim(),
+      agendaOutcomes: agendaOutcomes.trim(),
+      relatedTasks: relatedTasks.trim(),
       category,
     });
     if (ok) {
@@ -198,25 +198,25 @@ export function AddSwimlaneTilePanel({
 
           <BulletTextarea
             id={`${baseId}-att`}
-            label="Attendees"
+            label="Suggested Attendees"
             value={attendees}
             onChange={setAttendees}
             rows={4}
             disabled={isSaving}
           />
           <BulletTextarea
-            id={`${baseId}-res`}
-            label="Resources"
-            value={resources}
-            onChange={setResources}
+            id={`${baseId}-agenda`}
+            label="Agenda & Outcomes"
+            value={agendaOutcomes}
+            onChange={setAgendaOutcomes}
             rows={4}
             disabled={isSaving}
           />
           <BulletTextarea
-            id={`${baseId}-out`}
-            label="Desired outcomes"
-            value={desiredOutcomes}
-            onChange={setDesiredOutcomes}
+            id={`${baseId}-related`}
+            label="Related Tasks"
+            value={relatedTasks}
+            onChange={setRelatedTasks}
             rows={4}
             disabled={isSaving}
           />

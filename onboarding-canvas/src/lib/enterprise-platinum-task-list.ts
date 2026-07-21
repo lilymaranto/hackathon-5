@@ -1,0 +1,518 @@
+// Auto-generated from Copy of ServCon Implementation Task List.xlsx
+// Sheet: Enterprise Platinum Task List (through Level of Effort; plan Y/N columns omitted).
+
+export type EnterprisePlatinumTaskOptionalFlag = "Y" | "N" | "";
+
+export type EnterprisePlatinumTaskRow = {
+  /** Section header from the sheet (e.g. Project Management & Governance). */
+  section: string;
+  taskName: string;
+  optional: EnterprisePlatinumTaskOptionalFlag;
+  description: string;
+  requiredStakeholders: string;
+  desiredOutcomes: string;
+  resources: string;
+  levelOfEffort: string;
+};
+
+export const ENTERPRISE_PLATINUM_TASK_SECTIONS = [
+  "Project Management & Governance",
+  "Data",
+  "Technical",
+  "Audiences",
+  "Channels",
+  "Email",
+  "SMS",
+  "WhatsApp",
+  "Web/Mobile Channels",
+  "Messaging",
+  "Analytics",
+] as const;
+
+export const ENTERPRISE_PLATINUM_TASKS: EnterprisePlatinumTaskRow[] = [
+  {
+    "section": "Project Management & Governance",
+    "taskName": "Add Dashboard Users",
+    "optional": "N",
+    "description": "Invite your team members to your Braze dashboard by entering their email addresses and assigning them to the appropriate workspaces. As part of this setup, Two-Factor Authentication (2FA) should be added for all users, adding a baseline layer of security to every dashboard login.",
+    "requiredStakeholders": "Admin: Executes the invitations and enforces 2FA settings\nIT / Security: Defines who should have access and ensures 2FA aligns with company security policy\nMarketing / Technical Leads: Confirm which team members need access and at what level",
+    "desiredOutcomes": "- All relevant team members (marketing, engineering, analytics, etc.) have active Braze accounts and can begin working in the platform\n- A clear record of who has been granted dashboard access exists, forming the foundation for ongoing access management",
+    "resources": "https://www.braze.com/docs/user_guide/administer/global/user_management/manage_company_users",
+    "levelOfEffort": "Low"
+  },
+  {
+    "section": "Project Management & Governance",
+    "taskName": "Manage Braze User Permissions",
+    "optional": "N",
+    "description": "User permissions allow you to control what actions individual dashboard users or teams can perform within the platform, covering both personal account access and global company settings. This task involves creating permission sets and assigning them to users on a per-workspace basis, ensuring people only have access to what's relevant to their role.",
+    "requiredStakeholders": "Admin: creates and assigns permission sets within the platform\nIT / Security: advises on least-privilege principles and access control requirements\nMarketing / Technical Leads: define what each role or team actually needs access to day-to-day",
+    "desiredOutcomes": "- A repeatable permission framework is in place that can be applied consistently as new users are added over time",
+    "resources": "https://www.braze.com/docs/user_guide/administer/global/user_management/permissions",
+    "levelOfEffort": "Low"
+  },
+  {
+    "section": "Project Management & Governance",
+    "taskName": "Setup Teams",
+    "optional": "Y",
+    "description": "Teams can be set up across customer base location, language, and custom attributes so that dashboard users have different access to messaging features and customer data. This layer of access sits beneath workspace-level permissions and is particularly useful for larger organizations with distinct regional or functional groups. It allows more granular segmentation of who can create, edit, or view specific campaigns and content.",
+    "requiredStakeholders": "Admin: configures Teams within the dashboard\nMarketing Lead: defines how teams should be structured (by region, brand, channel, etc.), and define the access requirements for each team",
+    "desiredOutcomes": "Different business units or regional teams can operate independently within the same workspace reducing operational risk\nMarketers only see the campaigns and data relevant to their team",
+    "resources": "https://www.braze.com/docs/user_guide/administer/global/user_management/teams",
+    "levelOfEffort": "Medium"
+  },
+  {
+    "section": "Project Management & Governance",
+    "taskName": "Setup SAML, Single Sign-On (SSO) & Automated User Provisioning",
+    "optional": "Y",
+    "description": "SAML SSO is configured by connecting your identity provider (IdP) in Braze's Security Settings, and once enforced, controls authentication for all dashboard users centrally. SAML Just-in-Time (JIT) provisioning takes this further by allowing new users to create a Braze account on their first sign-in, eliminating the need for administrators to manually create accounts. For full lifecycle management, SCIM provisioning can be configured to automate user creation, updates, and deprovisioning directly from your IdP.",
+    "requiredStakeholders": "IT / Security: configures the IdP connection and SCIM provisioning\nAdmin: coordinates setup on the Braze side",
+    "desiredOutcomes": "All Braze logins are routed through your company's identity provider, ensuring consistent security policies are applied across the organisation\nUser provisioning and deprovisioning is automated and tied to your existing directory, keeping access tightly managed as your team changes over time",
+    "resources": "https://www.braze.com/docs/user_guide/administer/global/saml_single_sign_on/saml_sso_setup\nhttps://www.braze.com/docs/user_guide/administer/global/user_management/automated_user_provisioning",
+    "levelOfEffort": "Medium"
+  },
+  {
+    "section": "Project Management & Governance",
+    "taskName": "Configure Braze Workspaces",
+    "optional": "N",
+    "description": "Workspaces group your user data, segments, and API keys into one location and have independent access controls and user permission definitions. You'll work with your onboarding team to determing an appropriate workspace structure for your business. At a minimum, we'll create Production and Testing workspaces for you.",
+    "requiredStakeholders": "Admin: creates and configures workspaces in the dashboard\nMarketing Lead: defines the workspace structure based on brand, region, or environment needs\nTechnical Lead: ensures workspace structure aligns with SDK and API integration plans",
+    "desiredOutcomes": "Production and Development Workspaces Created\nWorkspace structure defined if your business has multiple brands or regions using Braze",
+    "resources": "https://www.braze.com/docs/user_guide/administer/global/create_and_manage_workspaces",
+    "levelOfEffort": "Medium"
+  },
+  {
+    "section": "Project Management & Governance",
+    "taskName": "Establish a Global Tagging Strategy",
+    "optional": "Y",
+    "description": "Tags in Braze are applied to campaigns, Canvases, and other assets to make them searchable, filterable, and reportable across the dashboard. A well-designed tagging system enables teams to instantly pull campaigns by attributes like region or channel, roll up results across campaigns for smarter reporting, and apply frequency capping and segmentation at the tag level.",
+    "requiredStakeholders": "Marketing End User(s): primary owner; defines and documents the taxonomy\nAdmin: implements governance controls to restrict ad hoc tag creation\nMarketing Lead: provide input on how they need to filter and report on campaigns",
+    "desiredOutcomes": "A standardized, governed taxonomy of tags is defined and documented before campaigns go live\nTeams can quickly filter and report on campaigns by type, channel, region, or other dimensions",
+    "resources": "https://www.braze.com/docs/user_guide/administer/global/workspace_settings/tags",
+    "levelOfEffort": "Low"
+  },
+  {
+    "section": "Project Management & Governance",
+    "taskName": "Configure Frequency Capping Rules",
+    "optional": "Y",
+    "description": "Global frequency capping in Braze allows you to set rules that limit how many messages any individual user can receive within a defined time window, across all channels or by specific channel type. Rules can be configured by message type and time frame and measured in minutes, days, or weeks",
+    "requiredStakeholders": "Marketing End User(s): primary owner; defines the rules based on messaging strategy\nMarketing Lead: provides input on acceptable contact frequencies per channel",
+    "desiredOutcomes": "A consistent, company-wide policy governs how frequently customers are contacted, preventing over-messaging across teams and campaigns",
+    "resources": "https://www.braze.com/docs/user_guide/messaging/messaging_fundamentals/frequency_capping",
+    "levelOfEffort": "Low"
+  },
+  {
+    "section": "Data",
+    "taskName": "Campaign Planning",
+    "optional": "N",
+    "description": "Auditing and prioritising the campaigns and journeys you want to build in Braze, categorised by P1 (launch-critical), P2 (near-term), and P3 (longer-term). This covers both migrations from your existing platform and net new campaigns to be launched in Braze.",
+    "requiredStakeholders": "Marketing Lead: primary owner; defines campaign priorities and identifies migration candidates\nMarketing End User(s): ensures campaign requirements are technically feasible within Braze",
+    "desiredOutcomes": "A prioritised, agreed-upon list of campaigns and journeys gives all stakeholders a clear picture of what will be built and in what order",
+    "resources": "https://www.braze.com/docs/user_guide/get_started/campaigns_and_canvases",
+    "levelOfEffort": "High"
+  },
+  {
+    "section": "Data",
+    "taskName": "Data Planning",
+    "optional": "N",
+    "description": "Defining your custom data strategy, including the custom attributes, events, and event properties, that Braze will need to power the campaigns identified during campaign planning. This ensures your engineering team has a clear brief for what data needs to be captured and passed into Braze before technical implementation begins",
+    "requiredStakeholders": "Marketing Lead: defines what data is needed to support each campaign\nMarketing End User(s): provide input on personalisation and segmentation requirements that inform the data specification\nTechnical Lead: assesses feasibility and confirms how each data point will be captured and sent to Braze",
+    "desiredOutcomes": "A complete custom data specification is documented and signed off, giving your engineering team a clear brief for implementation\nAll campaigns and journeys identified in campaign planning have the data they need accounted for ahead of technical build",
+    "resources": "https://www.braze.com/docs/user_guide/data/activation/custom_data/#attributes-and-events",
+    "levelOfEffort": "High"
+  },
+  {
+    "section": "Technical",
+    "taskName": "Define User Identifier Strategy",
+    "optional": "N",
+    "description": "User IDs, called External IDs in Braze, should be set for all known users to allow you to track users across devices and platforms. The User ID determines how user profiles are created, merged, and maintained in Braze.",
+    "requiredStakeholders": "Technical Lead: primary owner; implements the identifier strategy across SDK and API\nMarketing Lead: provides input on how users should be tracked across different touchpoints and devices",
+    "desiredOutcomes": "A clear, agreed-upon approach to user identification is documented and shared with your engineering team before any data is sent to Braze\nUser profiles are created consistently from day one, avoiding duplicate profiles or identity fragmentation that can affect segmentation and personalisation",
+    "resources": "https://www.braze.com/docs/user_guide/data/unification/user_data/user_profile_lifecycle",
+    "levelOfEffort": "Medium"
+  },
+  {
+    "section": "Technical",
+    "taskName": "SDK Integration (iOS, Android, Web)",
+    "optional": "Y",
+    "description": "The Braze SDK automatically captures user-level data, giving you key metrics for your app and user base, and powers messaging channels including in-app messages and push notifications directly from the Braze dashboard. Your engineering team will implement the SDK across each relevant platform, connecting your app or website to Braze so that data flows in real time.",
+    "requiredStakeholders": "Technical Lead: oversees the implementation and ensures it aligns with your broader technical architecture\nFrontend Engineer: primary owner; implements the SDK across iOS, Android, and Web platforms\nMarketing End-Users: confirm that the data coming through matches their campaign and personalisation requirements",
+    "desiredOutcomes": "Braze is connected to your app and/or website across all relevant platforms, with user sessions, events, and attributes flowing into the dashboard in real time\nIn-app messaging and push notification channels are enabled and ready for your marketing team to use",
+    "resources": "https://www.braze.com/docs/user_guide/get_started/sdk_overview\nhttps://www.braze.com/docs/developer_guide/home",
+    "levelOfEffort": "High"
+  },
+  {
+    "section": "Technical",
+    "taskName": "REST API Integration",
+    "optional": "Y",
+    "description": "The Braze REST API allows you to send data from your backend systems to Braze in real time, trigger messages programmatically, and track delivery analytics alongside your marketing campaigns and Canvases in the dashboard. This integration is typically used to complement the SDK, handling data and triggers that originate from server-side systems rather than the client. It is particularly relevant for transactional use cases or where user data lives outside of your app or website.",
+    "requiredStakeholders": "Technical Lead: oversees the implementation and ensures it aligns with your broader technical architecture\nBackend Engineer: primary owner; builds and maintains the REST API integration",
+    "desiredOutcomes": "Your backend systems can send data to Braze and trigger messages programmatically, extending Braze beyond client-side interactions\nA reliable, documented API integration is in place that your engineering team can maintain and expand over time",
+    "resources": "https://www.braze.com/docs/api/home",
+    "levelOfEffort": "High"
+  },
+  {
+    "section": "Technical",
+    "taskName": "Set Up Cloud Data Ingestion (CDI)",
+    "optional": "Y",
+    "description": "Cloud Data Ingestion allows you to set up an integration between your data warehouse and Braze workspace to sync user attributes, events, and purchases on a recurring basis, creating a simple and secure connection directly from your warehouse to Braze. CDI automatically syncs data between platforms on the schedule of your choice, with Braze connecting to your data warehouse, pulling in new data, and updating relevant user profiles.",
+    "requiredStakeholders": "Technical Lead: primary owner; configures the warehouse connection and sync schedule\nData / Analytics Team: defines which data sets should be synced and ensures the warehouse tables are structured correctly",
+    "desiredOutcomes": "Data held in your warehouse is automatically and regularly synced into Braze user profiles, enriching personalisation and segmentation without manual intervention\nA reliable, scalable data pipeline is established between your warehouse and Braze that can be expanded as your data needs grow",
+    "resources": "https://www.braze.com/docs/user_guide/data/unification/cloud_ingestion",
+    "levelOfEffort": "Medium"
+  },
+  {
+    "section": "Technical",
+    "taskName": "Import Existing User Data",
+    "optional": "N",
+    "description": "Importing your existing customer database into Braze is one of the first steps in making the platform ready for campaigns, ensuring your user profiles are populated with the data needed for segmentation and personalisation from day one. For one-time data import use cases, you can upload a CSV file, use APIs, your CDP, or Cloud Data Ingestion. When importing your email list, it is best practice to include only users who have engaged with an email within the last six months, and to ensure any suppression lists are excluded to protect your sender reputation.",
+    "requiredStakeholders": "Marketing Lead: defines which user data needs to be imported and confirms the data is accurate and up to date\nTechnical Lead: prepares and formats the data for import, ensuring it aligns with the user identifier strategy",
+    "desiredOutcomes": "Your existing customer database is available in Braze with accurate attributes and subscription states, ready for segmentation and campaign targeting from the outset",
+    "resources": "https://www.braze.com/docs/user_guide/audience/manage_audience/import_users",
+    "levelOfEffort": "Medium"
+  },
+  {
+    "section": "Technical",
+    "taskName": "Configure Currents (Real-Time Data Export)",
+    "optional": "Y",
+    "description": "Currents is a real-time data stream of engagement events that is the most robust and granular export available from the Braze platform, empowering you to use engagement data to power your business intelligence and analytics efforts in other platforms. It captures message engagement events such as email clicks, mobile push opens, and in-app message impressions, streaming them continuously to your data warehouse, BI tool, or analytics platform of choice.",
+    "requiredStakeholders": "Technical Lead: primary owner; configures the Currents connector and destination\nData / Analytics Team: defines which events to stream and how the data will be used downstream",
+    "desiredOutcomes": "A continuous, real-time stream of Braze message engagement data flows into your data warehouse or analytics platform, giving your team a complete picture of campaign performance\nEngagement data from Braze is unified with data from other systems, enabling richer cross-channel reporting and attribution",
+    "resources": "https://www.braze.com/docs/user_guide/data/distribution/braze_currents/setting_up_currents",
+    "levelOfEffort": "Low"
+  },
+  {
+    "section": "Technical",
+    "taskName": "Configure Snowflake Data Sharing",
+    "optional": "Y",
+    "description": "Snowflake Data Sharing allows you to access and query your Braze data directly within your Snowflake environment, without the need for file exports, custom pipelines, or data duplication. This provides your data and analytics teams with a live view of Braze data in the warehouse they already work in, making it straightforward to combine Braze engagement data with other business data for reporting and analysis.",
+    "requiredStakeholders": "Technical Lead: primary owner; configures the Snowflake Data Sharing connection\nData / Analytics Team: defines the use cases and ensures Braze data fits into existing data models and reporting structures",
+    "desiredOutcomes": "Your data team can query Braze data directly within Snowflake, reducing friction for reporting and analysis without the need for manual exports or bespoke pipelines\nBraze engagement data is readily available alongside your other business data in Snowflake, enabling richer cross-channel insights.",
+    "resources": "https://www.braze.com/docs/partners/data_and_analytics/data_warehouses/snowflake/data_sharing",
+    "levelOfEffort": "Low"
+  },
+  {
+    "section": "Technical",
+    "taskName": "Connect a Customer Data Platform (CDP)",
+    "optional": "Y",
+    "description": "Connecting a CDP such as Segment or mParticle allows you to centralise the management of data flowing into and out of Braze, reducing the need for custom-built pipelines and giving your team greater control over how data is collected and distributed across your tech stack. It also allows you to manage your Braze integration alongside all other platform connections from a single place, streamlining how your broader marketing technology ecosystem operates.",
+    "requiredStakeholders": "Technical Lead: primary owner; configures the CDP connection on both sides\nData / Analytics Team: defines the data mappings and ensures consistency across platforms",
+    "desiredOutcomes": "Braze is connected to your CDP, with data flowing consistently and reliably between platforms without the need for bespoke engineering work\nYour team has a single, centralised point of control for managing how customer data is routed across your wider marketing technology stack",
+    "resources": "https://www.braze.com/docs/partners/data_and_analytics",
+    "levelOfEffort": "Medium"
+  },
+  {
+    "section": "Technical",
+    "taskName": "Shopify Integration",
+    "optional": "Y",
+    "description": "The Braze and Shopify integration connects Shopify's eCommerce capabilities with Braze, enabling targeted and timely messages to your users based on real-time shopping behaviours and transactional data. The integration supports customer profile syncing via Shopify webhooks, so that when a user profile is created or updated in Shopify, a corresponding profile in Braze is created or updated, including custom attributes, standard attributes, and subscription group states.",
+    "requiredStakeholders": "Technical Lead: primary owner; implements and configures the integration\nMarketing Lead: defines which Shopify events and data points are needed to power their campaigns",
+    "desiredOutcomes": "Shopify customer profiles, purchase history, and behavioural data are available in Braze, enabling personalised lifecycle campaigns driven by real-time eCommerce activity\nSubscription states are kept in sync between Shopify and Braze, ensuring your audience lists remain accurate and compliant",
+    "resources": "https://www.braze.com/docs/partners/ecommerce/shopify/shopify_overview",
+    "levelOfEffort": "Medium"
+  },
+  {
+    "section": "Technical",
+    "taskName": "QA & Testing",
+    "optional": "N",
+    "description": "QA and testing is the final step before handing over to your marketing team, validating that all technical integrations are working as expected end to end. This covers confirming that data is flowing correctly into Braze, that messages are triggering as intended, and that user profiles are being created and updated accurately.",
+    "requiredStakeholders": "Technical Lead: primary owner; executes technical validation across SDK, API, and integrations\nMarketing End User(s): validates that campaigns and journeys trigger correctly based on real user behaviour",
+    "desiredOutcomes": "All integrations are validated and signed off before go-live, giving your team full confidence that Braze is behaving as expected across every channel and use case\nAny issues are identified and resolved in a controlled environment, ensuring a smooth handover to your marketing team and a strong start to your first campaigns",
+    "resources": "https://www.braze.com/docs/user_guide/get_started/integrations/#step-5-you-both-perform-qa-on-your-implementation",
+    "levelOfEffort": "Medium"
+  },
+  {
+    "section": "Audiences",
+    "taskName": "Configure Subscription Groups (Email & SMS)",
+    "optional": "Y",
+    "description": "Subscription groups are segment filters that allow you to present more granular subscription options to end users, enabling customers to pick and choose which categories of communication they want to receive from a single preference centre.",
+    "requiredStakeholders": "Marketing Lead: defines how many groups are needed and how they map to your messaging categories\nLegal / Compliance: confirms that subscription group structure meets applicable regulatory requirements for email and SMS",
+    "desiredOutcomes": "Subscription groups are configured for all relevant channels, giving your team precise control over who receives each category of communication\nA preference centre is in place that empowers customers to manage their own communication preferences, supporting compliance and reducing opt-out rates (Optional)",
+    "resources": "https://www.braze.com/docs/user_guide/channels/email/subscriptions \nhttps://www.braze.com/docs/user_guide/channels/sms_mms_and_rcs/message_setup/subscription_groups",
+    "levelOfEffort": "Low"
+  },
+  {
+    "section": "Audiences",
+    "taskName": "Build Segments",
+    "optional": "N",
+    "description": "With data flowing into Braze and your campaign priorities agreed, this task involves building the audience segments that will be used across yourcampaigns and journeys. Segments in Braze are built using filters that can be combined across multiple filter groups, joined by AND or OR logic, allowing for precise and flexible audience definitions.",
+    "requiredStakeholders": "Marketing Lead: reviews segments to ensure they accurately reflect the intended audiences and campaign requirements\nMarketing End-Users: primary owner; builds and validates segments in the dashboard",
+    "desiredOutcomes": "A library of reusable segments is in place that your marketing team can build on as new campaigns are added over time, and be used for reporting against your key audience segments.",
+    "resources": "https://www.braze.com/docs/user_guide/audience/segments/creating_a_segment",
+    "levelOfEffort": "Medium"
+  },
+  {
+    "section": "Audiences",
+    "taskName": "Set Up Global Control Group",
+    "optional": "Y",
+    "description": "The Global Control Group is a holdout audience that is excluded from all campaigns and Canvases in Braze, allowing you to measure the true incremental impact of your marketing programme by comparing outcomes against a group of users who received no messages. The control group should be no smaller than 1,000 users and no larger than 10% of your total audience, and is configured once during onboarding to provide a consistent baseline for measurement over time.",
+    "requiredStakeholders": "Marketing Lead: primary owner; defines the size of the control group based on your overall audience and measurement goals\nMarketing End-Users: informed on which users are excluded so campaign performance expectations are set correctly",
+    "desiredOutcomes": "A properly sized holdout group is established from the outset, giving your team a reliable baseline to measure the overall impact of your Braze messaging programme\nReporting on incremental lift is possible from your first campaigns, enabling data-driven decisions about channel investment and messaging frequency",
+    "resources": "https://www.braze.com/docs/user_guide/audience/global_control_group",
+    "levelOfEffort": "Low"
+  },
+  {
+    "section": "Email",
+    "taskName": "Configure Sending Domains (SPF, DKIM, DMARC)",
+    "optional": "Y",
+    "description": "Setting up your sending domains is a prerequisite for all email activity in Braze, establishing the technical foundation that proves to mailbox providers that your emails are legitimate and authorised to be sent on behalf of your brand. SPF defines which servers are authorised to send emails on your behalf, DKIM protects the integrity of your email content with a unique key added to your DNS records, and DMARC builds on both to strengthen spam control and provide regular deliverability reports. Braze sets up your DKIM and SPF records when configuring your IPs and domains, DMARC is an optional add-on that requires your team to publish a record to your own DNS.",
+    "requiredStakeholders": "IT: primary owner; adds the required DNS records for SPF, DKIM, and DMARC\nMarketing Lead: confirms the sending domain structure and subdomain naming approach",
+    "desiredOutcomes": "A dedicated sending subdomain is configured for Braze, keeping your root domain reputation protected and your email programme structured for long-term deliverability\nYour sending domain is fully authenticated with SPF, DKIM, and DMARC in place, giving mailbox providers confidence that your emails are legitimate",
+    "resources": "https://www.braze.com/docs/user_guide/channels/email/email_setup/setting_up_ips_and_domains \nhttps://www.braze.com/docs/user_guide/channels/email/email_setup/authentication",
+    "levelOfEffort": "Medium"
+  },
+  {
+    "section": "Email",
+    "taskName": "Develop IP Warming Plan",
+    "optional": "Y",
+    "description": "IP warming is the practice of getting email inbox providers accustomed to receiving messages from your brand, and is essential to confirm your messages reach their destination inboxes at a consistently high rate. A structured warming plan defines the send schedule, starting volumes, audience sequencing, and key metrics to monitor throughout. Central to this is ensuring an engagement attribute is present on user profiles in Braze so that your most active users can be prioritised first, signalling to mailbox providers that your emails are wanted. IP warming typically takes between two and six weeks depending on your audience size, sending frequency, and engagement levels.",
+    "requiredStakeholders": "Marketing Lead: defines what constitutes an engaged user and confirms the engagement attribute is included in the data planning workstream\nBackend Engineer: ensures the engagement attribute is captured and passed into Braze as part of the technical implementation",
+    "desiredOutcomes": "A documented IP warming schedule is agreed upon before any emails are sent, with clear daily volume targets, audience sequencing\nAn engagement attribute is defined and present on user profiles in Braze ahead of warming, ensuring the most engaged users can be accurately identified and prioritised from day one",
+    "resources": "https://www.braze.com/docs/user_guide/channels/email/email_setup/ip_warming",
+    "levelOfEffort": "Medium"
+  },
+  {
+    "section": "Email",
+    "taskName": "Execute IP Warming (Automated)",
+    "optional": "Y",
+    "description": "Braze's automated IP warming sends to your most engaged subscribers first, growing daily volume at a pace that matches best practices, while tracking engagement and deliverability signals and adjusting your schedule automatically if any issues are detected. This approach reduces the operational burden on your team, removing the need to manually build and schedule campaigns each day throughout the warming period.",
+    "requiredStakeholders": "Marketing Lead or End-User: primary owner during execution; monitors performance and escalates any issues\nMarketing End-Users: provide the email templates required to run the warming campaigns",
+    "desiredOutcomes": "Your sending IP establishes a positive reputation with mailbox providers with minimal manual intervention from your team\nDeliverability metrics are monitored automatically throughout, with Braze adjusting the schedule in real time to protect your sender reputation",
+    "resources": "https://www.braze.com/docs/user_guide/channels/email/email_setup/ip_warming/automated_ip_warming",
+    "levelOfEffort": "Medium"
+  },
+  {
+    "section": "Email",
+    "taskName": "Execute IP Warming (Manual)",
+    "optional": "Y",
+    "description": "Manual IP warming follows the same schedule and principles as the automated approach but requires your team to build and deploy each campaign individually throughout the warming period. Best practice is to start with a small number of emails to your most engaged subscribers and increase volume steadily, allowing mailbox providers to see consistent, predictable growth rather than sudden spikes. Deliverability metrics including open rates, bounce rates, and spam complaints should be reviewed daily to ensure the programme stays on track.",
+    "requiredStakeholders": "Marketing Lead or End-User: primary owner during execution; monitors performance daily and escalates any issues\nMarketing End-Users: build and schedule the campaigns used during the warming period in line with the agreed plan",
+    "desiredOutcomes": "Your sending IP successfully establishes a positive reputation with mailbox providers, with emails consistently reaching the inbox at full send volume by the end of the warming period\nDeliverability metrics are reviewed daily throughout the warming period, with volume adjustments made promptly if any signals of deterioration are identified",
+    "resources": "https://www.braze.com/docs/user_guide/channels/email/email_setup/ip_warming",
+    "levelOfEffort": "High"
+  },
+  {
+    "section": "Email",
+    "taskName": "Build Email Templates",
+    "optional": "Y",
+    "description": "Building a library of reusable email templates in Braze ensures your marketing team has on-brand, production-ready starting points for every campaign type, reducing build time and maintaining visual consistency across all communications. Templates can be built using Braze's drag-and-drop editor for a no-code experience, or in HTML for teams who want greater design flexibility.",
+    "requiredStakeholders": "Marketing End-Users: primary owner; builds and maintains templates in the Braze dashboard using the drag-and-drop editor or HTML\nMarketing Lead: defines which template types are needed and reviews against brand and compliance standards",
+    "desiredOutcomes": "A set of reusable, on-brand email templates is ready in Braze before your first campaigns are built, enabling your marketing team to move quickly without starting from scratch each time\nTemplates are built to a consistent standard with correct footer, unsubscribe links, and brand guidelines applied, reducing the risk of compliance or branding issues in live campaigns",
+    "resources": "https://www.braze.com/docs/user_guide/messaging/templates/email_templates/email_template",
+    "levelOfEffort": "Medium"
+  },
+  {
+    "section": "Email",
+    "taskName": "Configure Unsubscribe & Preference Centre",
+    "optional": "Y",
+    "description": "A properly configured unsubscribe mechanism and preference centre is both a legal requirement and a key part of maintaining a healthy, engaged email list. The Braze preference centre allows users to manage their subscription group preferences from a single page, with the option to unsubscribe from individual communication types or globally unsubscribe from all emails. A custom email footer containing the unsubscribe link can be configured at workspace level and templated into every email, ensuring consistency across all campaigns without needing to update each template individually.",
+    "requiredStakeholders": "Marketing Lead: defines the structure of the preference centre and which subscription groups should be surfaced to users\nMarketing End-Users: builds and configures the preference centre in the Braze dashboard\nLegal / Compliance: reviews the unsubscribe and preference centre setup to confirm it meets applicable regulatory requirements",
+    "desiredOutcomes": "Every email sent from Braze contains a compliant unsubscribe mechanism, with users able to manage their preferences easily from a branded preference centre\nUnsubscribe and preference centre settings are configured at workspace level, ensuring consistent compliance across all campaigns",
+    "resources": "https://www.braze.com/docs/user_guide/audience/subscription_preferences/preference_center/dnd_preference_center\nhttps://www.braze.com/docs/user_guide/channels/email/subscriptions",
+    "levelOfEffort": "Low"
+  },
+  {
+    "section": "Email",
+    "taskName": "Set Up Inbox Vision & Spam Testing",
+    "optional": "Y",
+    "description": "Inbox Vision is a Braze feature that allows marketers to preview how their emails render across a range of email clients, and includes spam testing that predicts whether an email will land in spam folders or inboxes by running tests across major spam filters and ISP filters including Gmail and Outlook. Running Inbox Vision and spam tests before any campaign goes live ensures rendering issues and potential deliverability problems are caught and resolved before they reach your audience.",
+    "requiredStakeholders": "Marketing End-Users: primary owner; runs Inbox Vision and spam tests as part of the campaign build and QA process\nMarketing Lead: sets the standard for what constitutes a passing test before a campaign is approved to send",
+    "desiredOutcomes": "Your marketing team has a reliable pre-send testing process in place, with Inbox Vision used consistently to validate rendering across email clients before campaigns are launched\nSpam test results are reviewed as part of the campaign build process, giving your team confidence that emails will reach the inbox and render correctly across all major clients",
+    "resources": "https://www.braze.com/docs/user_guide/channels/email/inbox_vision",
+    "levelOfEffort": "Low"
+  },
+  {
+    "section": "SMS",
+    "taskName": "Set Up Long Code",
+    "optional": "Y",
+    "description": "Long codes are 10-digit phone numbers used for lower-volume, conversational SMS sending, and are a cost-effective option for brands getting started with SMS or sending across a variety of use cases. Your Braze SMS Operations team will guide you through the provisioning process. For US long codes, A2P 10DLC registration is required by all carriers and typically takes four to six weeks. Similar registration requirements exist in other regions, and your SMS Operations team will confirm what applies based on where you intend to send.",
+    "requiredStakeholders": "Marketing Lead: completes application forms and confirms the use cases and regions required for your SMS program\nLegal / Compliance: reviews regulatory requirements for each target region and signs off on the registration submissions",
+    "desiredOutcomes": "Long codes are provisioned and fully registered for all target regions \nYour SMS programme is set up in full compliance with carrier and regulatory requirements for every region you intend to send in",
+    "resources": "https://www.braze.com/docs/user_guide/channels/sms_mms_and_rcs/message_setup/sender_setup\nhttps://www.braze.com/docs/user_guide/channels/sms_mms_and_rcs/message_setup/sender_setup/10dlc",
+    "levelOfEffort": "Medium"
+  },
+  {
+    "section": "SMS",
+    "taskName": "Set Up Short Code",
+    "optional": "Y",
+    "description": "Short codes are five or six-digit numbers specifically designed for high-volume A2P messaging, offering higher throughput and stronger deliverability than long codes for brands sending at scale. The provisioning and approval process for short codes is managed by the Braze SMS Operations team and typically takes longer than long code registration, so it should be initiated as early as possible in the onboarding timeline. B",
+    "requiredStakeholders": "Marketing Lead: completes application forms and confirms the use cases and regions required for your SMS program\nLegal / Compliance: reviews regulatory requirements for each target region and signs off on the registration submissions",
+    "desiredOutcomes": "Your short code is provisioned, approved, and ready to send\nPromotional and transactional use cases are assigned to separate short codes where applicable, keeping your sending infrastructure clean and deliverability optimized",
+    "resources": "https://www.braze.com/docs/user_guide/channels/sms_mms_and_rcs/message_setup/sender_setup",
+    "levelOfEffort": "Medium"
+  },
+  {
+    "section": "SMS",
+    "taskName": "Migrate Codes from Existing Provider",
+    "optional": "Y",
+    "description": "For customers moving their existing sending numbers to Braze from another provider, Braze supports internal SMS migrations that maintain number continuity with no downtime, provided the codes are hosted with a compatible provider. Your Braze SMS Operations team will manage the migration process end to end, coordinating with your existing provider to port the numbers across without interrupting your SMS programme. A critical prerequisite is that all SMS campaigns are fully built, tested, and ready to send in Braze before the migration takes place, as your sending numbers will switch over to Braze at the point of migration",
+    "requiredStakeholders": "Marketing Lead: confirms which numbers need to be migrated, signs off on campaign readiness in Braze, and sets the target migration date",
+    "desiredOutcomes": "Your existing sending numbers are successfully migrated to Braze with no downtime or disruption to your SMS program, with campaigns live and ready to send from the moment the migration completes",
+    "resources": "https://www.braze.com/docs/user_guide/channels/sms_mms_and_rcs/message_setup/sender_setup",
+    "levelOfEffort": "Medium"
+  },
+  {
+    "section": "SMS",
+    "taskName": "Configure Opt-In & Opt-Out Keywords",
+    "optional": "Y",
+    "description": "Keywords are a foundational aspect of automated SMS messaging, allowing users to send preset single-word commands to opt in or out of receiving messages, with Braze supporting custom keywords and fuzzy opt-out to further tailor the user journey. Configuring your keyword responses correctly is both a compliance requirement and an important part of the customer experience, ensuring users receive clear, on-brand confirmation messages when they interact with your SMS programme. In the US, standard opt-out keywords include STOP, QUIT, END, CANCEL, UNSUBSCRIBE, OPTOUT, and REVOKE, all of which must be honoured under TCPA regulations.",
+    "requiredStakeholders": "Marketing Lead: defines the keyword response copy and confirms the list of keywords to be configured\nMarketing End-Users: configures keywords within the Braze dashboard and tests responses end to end\nLegal / Compliance: reviews keyword configuration to confirm it meets TCPA and any other applicable regulatory requirements",
+    "desiredOutcomes": "All required opt-in and opt-out keywords are configured and tested for every SMS subscription group, ensuring your programme is compliant from the first send",
+    "resources": "https://www.braze.com/docs/user_guide/channels/sms_mms_and_rcs/message_features_and_optimization/keyword_processing/optin_optout",
+    "levelOfEffort": "Low"
+  },
+  {
+    "section": "SMS",
+    "taskName": "Build SMS Messages",
+    "optional": "Y",
+    "description": "With sending numbers provisioned and subscription groups configured, your marketing team can begin building the SMS messages that will power your priority campaigns and journeys in Braze.",
+    "requiredStakeholders": "Marketing End-User(s): primary owner; builds and tests SMS messages in the Braze dashboard\nMarketing Lead: defines which message types are needed and reviews against brand and compliance standards",
+    "desiredOutcomes": "All SMS messages required for campaign launches are built, tested, and approved in Braze before go-live",
+    "resources": "https://www.braze.com/docs/user_guide/channels/sms_mms_and_rcs/create",
+    "levelOfEffort": "Medium"
+  },
+  {
+    "section": "SMS",
+    "taskName": "Set Up Quiet Hours",
+    "optional": "Y",
+    "description": "Quiet hours define a no-send window during which messages are either suppressed or delayed, protecting your customers from receiving texts outside of acceptable hours and ensuring your programme remains compliant with regulations governing SMS send times.",
+    "requiredStakeholders": "Marketing Lead or End-User(s): primary owner; defines quiet hour windows and acceptable rate limits based on your sending strategy\nLegal / Compliance: confirms that quiet hour settings meet regulatory requirements for each region",
+    "desiredOutcomes": "Quiet hours are configured for every region you send in, ensuring no customer receives an SMS outside of appropriate hours regardless of when a campaign is triggered",
+    "resources": "https://www.braze.com/docs/user_guide/messaging/messaging_fundamentals/quiet_hours",
+    "levelOfEffort": "Low"
+  },
+  {
+    "section": "WhatsApp",
+    "taskName": "Procure WhatsApp Phone Number",
+    "optional": "Y",
+    "description": "Before your WhatsApp Business Account can be activated, you need a dedicated phone number that meets Meta's requirements. The number must be owned by your business, have a country and area code, be able to receive voice calls or SMS, not be a short code, and not have been previously used with the WhatsApp Business Platform or connected to a personal WhatsApp account. You can purchase one through your business phone provider or through a partner like Twilio or Infobip, using your own account with either provider.",
+    "requiredStakeholders": "IT or Marketing Lead: primary owner; procures the number and ensures it meets Meta's technical requirements",
+    "desiredOutcomes": "A dedicated, compliant phone number is procured and ready to be registered to your WhatsApp Business Account before setup begins",
+    "resources": "https://www.braze.com/docs/user_guide/channels/whatsapp/whatsapp_setup/whatsapp_phone_numbers/acquire_a_phone_number",
+    "levelOfEffort": "Low"
+  },
+  {
+    "section": "WhatsApp",
+    "taskName": "WhatsApp Business Account Setup & Verification",
+    "optional": "Y",
+    "description": "Getting started with WhatsApp in Braze requires two connected Meta accounts: a Meta Business Account, which acts as the central management hub for your business across Meta's products and is where business verification and user permissions are controlled, and a WhatsApp Business Account (WABA), which sits within it and contains your WhatsApp phone number, message templates, and messaging settings. The WhatsApp Business Account is created directly within Braze using an embedded sign-up flow, which connects it to your Meta Business Account and your Braze workspace in one streamlined process.",
+    "requiredStakeholders": "Marketing Lead: primary owner; coordinates the setup process and confirms the business profile details and phone number to be used for WhatsApp\nMeta Business Manager Admin (if applicable): provides access to your WhatsApp Business Account to your Meta Business Account and authorises the integration with Braze\nLegal / Compliance: reviews Meta's content rules and opt-in policies to confirm your program is set up in full compliance",
+    "desiredOutcomes": "Your WhatsApp Business Account is created, verified, and connected to Braze\nMeta business verification is complete, unlocking higher messaging limits and giving your program a strong foundation for scaling",
+    "resources": "https://www.braze.com/docs/user_guide/channels/whatsapp/whatsapp_setup\nhttps://www.braze.com/docs/user_guide/channels/whatsapp/whatsapp_setup/embedded_signup",
+    "levelOfEffort": "Medium"
+  },
+  {
+    "section": "WhatsApp",
+    "taskName": "Set Up WhatsApp Message Templates",
+    "optional": "Y",
+    "description": "All business-initiated WhatsApp conversations must be started using an approved message template, and businesses can only initiate a conversation once a template has been reviewed and approved by Meta. Templates can be built in Meta Business Manager or directly in Braze's WhatsApp Template Builder. Approved templates can then be used across as many campaigns and Canvases as needed.",
+    "requiredStakeholders": "Marketing End-Users: primary owner; builds and submits templates for approval via Meta Business Manager or the Braze Template Builder\nMarketing Lead: defines which template types are needed based on the campaign roadmap and reviews against brand standards",
+    "desiredOutcomes": "All message templates required for priority campaigns are submitted, approved by Meta, and ready to use in Braze before your go-live date",
+    "resources": "https://www.braze.com/docs/user_guide/channels/whatsapp/message_features_and_optimization/template_builder",
+    "levelOfEffort": "Medium"
+  },
+  {
+    "section": "WhatsApp",
+    "taskName": "Configure Opt-In & Opt-Out",
+    "optional": "Y",
+    "description": "WhatsApp requires businesses to have customers explicitly opt in to messaging, and best practice is to send a confirmation message to users after collecting their consent, and to include clear opt-out instructions in the footer of the first message you send. Opt-ins can be collected through a variety of methods including in-app messages, in-browser pop-ups, SMS, or the Braze phone number capture form template.",
+    "requiredStakeholders": "Marketing Lead: defines the opt-in collection method and opt-out messaging approach\nMarketing End-Users: implements opt-in flows and configures opt-out handling in the Braze dashboard\nLegal / Compliance: confirms the opt-in approach meets WhatsApp's requirements and any applicable regional regulations",
+    "desiredOutcomes": "A compliant opt-in collection mechanism is in place before any WhatsApp messages are sent, with all opted-in users accurately reflected in your subscription group\nOpt-out handling is configured and clearly communicated to users from the first message, protecting your phone number quality rating and keeping your audience list healthy",
+    "resources": "https://www.braze.com/docs/user_guide/channels/whatsapp/message_processing/opt_ins_and_opt_outs",
+    "levelOfEffort": "Medium"
+  },
+  {
+    "section": "WhatsApp",
+    "taskName": "Set Up WhatsApp Flows",
+    "optional": "Y",
+    "description": "WhatsApp Flows allow you to build rich, interactive experiences directly within WhatsApp conversations, such as forms, surveys, appointment booking, and product selection, without requiring users to leave the app. This is particularly powerful for onboarding, feedback collection, and transactional use cases where a guided, structured experience adds significant value over a standard message. Flows are built within Meta's Flow Builder and then connected to Braze campaigns and Canvases.",
+    "requiredStakeholders": "Marketing End-Users: primary owner; builds and tests Flows in Meta's Flow Builder and connects them to Braze campaigns\nMarketing Lead: defines the use cases and desired outcomes for each Flow based on the campaign roadmap",
+    "desiredOutcomes": "Interactive WhatsApp Flows are built and connected to the relevant campaigns and Canvases in Braze, enabling richer, more engaging customer experiences within the channel",
+    "resources": "https://www.braze.com/docs/user_guide/channels/whatsapp/message_features_and_optimization/whatsapp_flows",
+    "levelOfEffort": "Medium"
+  },
+  {
+    "section": "Web/Mobile Channels",
+    "taskName": "Configure Push Notifications (iOS & Android)",
+    "optional": "Y",
+    "description": "Enabling push notifications requires uploading the relevant credentials for each platform to the Braze dashboard, allowing Braze to send notifications on your behalf. For iOS, this involves creating an SSL certificate in your Apple Developer account and uploading it to the Braze dashboard, which allows Braze to communicate with Apple's Push Notification service (APNs) and deliver notifications to your users' devices. For Android, Firebase Cloud Messaging (FCM) credentials need to be configured in the Braze dashboard.",
+    "requiredStakeholders": "Technical Lead: oversees the implementation and ensures credentials are correctly configured\nFrontend Engineer(s): primary owner; generates and uploads APNs certificates, configures FCM credentials, and ensures the SDK is correctly handling push tokens on both platforms\nMarketing Lead: confirms the platforms and use cases push notifications will support",
+    "desiredOutcomes": "Push notification credentials are correctly configured for both iOS and Android, with Braze able to deliver notifications to opted-in users on both platforms\nPush tokens are being correctly captured and associated with user profiles in Braze, ensuring your opted-in audience is accurate from launch",
+    "resources": "https://www.braze.com/docs/user_guide/channels/push/push_setup",
+    "levelOfEffort": "Low"
+  },
+  {
+    "section": "Web/Mobile Channels",
+    "taskName": "Configure Web Push",
+    "optional": "Y",
+    "description": "Web push notifications allow you to reach users through their browser even when they are not actively on your website, using the same SDK-based infrastructure as mobile push. Setup involves configuring your web push credentials in the Braze dashboard and ensuring the correct SDK implementation is in place on your website.",
+    "requiredStakeholders": "Technical Lead: oversees the implementation and ensures credentials are correctly configured\nFrontend Engineer: primary owner; implements the web push configuration within the Braze Web SDK\nMarketing Lead: defines the opt-in prompt strategy and the use cases web push will support",
+    "desiredOutcomes": "Web push is configured and enabled in Braze, allowing your team to reach website visitors with targeted notifications outside of their active browsing session",
+    "resources": "https://www.braze.com/docs/user_guide/channels/push/platform_specific_resources/web",
+    "levelOfEffort": "Low"
+  },
+  {
+    "section": "Web/Mobile Channels",
+    "taskName": "Set Up In-App Messages",
+    "optional": "Y",
+    "description": "In-app messages are delivered to users while they are actively using your app or website, making them ideal for onboarding flows, feature announcements, promotions, and prompting users to take action without relying on push opt-in. Unlike push notifications, in-app messages require no additional setup beyond the SDK integration, meaning your marketing team can begin building and launching them as soon as the SDK is live.",
+    "requiredStakeholders": "Marketing Lead: defines the use cases and trigger logic for in-app messages across priority campaigns\nMarketing End-Users: primary owner; builds and tests in-app message templates in the Braze dashboard",
+    "desiredOutcomes": "In-app message templates are built and ready to use for priority campaign launches, with trigger logic defined and validated before go-live\nYour marketing team is confident building and launching in-app messages independently, with a clear understanding of the available formats and trigger options",
+    "resources": "https://www.braze.com/docs/user_guide/channels/in_app_messages",
+    "levelOfEffort": "Low"
+  },
+  {
+    "section": "Web/Mobile Channels",
+    "taskName": "Set Up Content Cards",
+    "optional": "Y",
+    "description": "Content Cards are embedded directly into your app or website, allowing you to create persistent, targeted streams of rich content that extend the reach of other channels without interrupting the user experience. While Content Cards don't require separate credentials or permissions setup like push, your engineering team still needs to implement the feed placement within your app or website and decide whether to use Braze's default feed UI or build a fully custom interface.",
+    "requiredStakeholders": "Technical Lead: oversees the implementation and ensures the feed placement and any custom UI work is completed correctly\nFrontend Engineer(s): primary owner; implements Content Card placements, applies brand styling, and coordinates on key-value pair logic with the marketing team\nMarketing Lead: defines the use cases and content strategy for Content Cards across priority campaigns\nMarketing End-Users: builds and manages Content Cards in the Braze dashboard",
+    "desiredOutcomes": "Content Card placements are defined, implemented, and styled within your app or website, with cards ready to launch as part of your priority campaigns\nA process is in place for managing the Content Card feed over time, including how cards are targeted, updated, and expired to keep the experience relevant",
+    "resources": "https://www.braze.com/docs/user_guide/channels/content_cards",
+    "levelOfEffort": "High"
+  },
+  {
+    "section": "Messaging",
+    "taskName": "Build Priority 1 Campaigns & Canvases",
+    "optional": "N",
+    "description": "In Braze, campaigns are used for sending a single targeted message to a group of users across one or more channels, while Canvases are used for sending a series of messages as part of an overarching customer journey, where a user's path can split into different routes depending on their actions or inaction with your brand. This task involves building the priority campaigns and Canvases identified during campaign planning, using the segments, templates, and data that have been set up throughout the onboarding process.",
+    "requiredStakeholders": "Marketing End-Users: primary owner; builds and tests campaigns and Canvases in the Braze dashboard\nMarketing Lead: reviews and signs off on priority builds against the agreed campaign roadmap",
+    "desiredOutcomes": "All priority campaigns and Canvases are built, tested, and approved in Braze before go-live, with targeting, messaging, and conversion events configured correctly\nYour marketing team is confident building and launching campaigns and Canvases independently, with a clear understanding of when to use each tool",
+    "resources": "https://www.braze.com/docs/user_guide/messaging/campaigns/creating_campaign\nhttps://www.braze.com/docs/user_guide/messaging/canvas/create_a_canvas",
+    "levelOfEffort": "High"
+  },
+  {
+    "section": "Messaging",
+    "taskName": "Build Priority 2 Campaigns & Canvases",
+    "optional": "N",
+    "description": "In Braze, campaigns are used for sending a single targeted message to a group of users across one or more channels, while Canvases are used for sending a series of messages as part of an overarching customer journey, where a user's path can split into different routes depending on their actions or inaction with your brand. This task involves building the priority campaigns and Canvases identified during campaign planning, using the segments, templates, and data that have been set up throughout the onboarding process.",
+    "requiredStakeholders": "Marketing End-Users: primary owner; builds and tests campaigns and Canvases in the Braze dashboard\nMarketing Lead: reviews and signs off on priority builds against the agreed campaign roadmap",
+    "desiredOutcomes": "All priority campaigns and Canvases are built, tested, and approved in Braze before go-live, with targeting, messaging, and conversion events configured correctly\nYour marketing team is confident building and launching campaigns and Canvases independently, with a clear understanding of when to use each tool",
+    "resources": "https://www.braze.com/docs/user_guide/messaging/campaigns/creating_campaign\nhttps://www.braze.com/docs/user_guide/messaging/canvas/create_a_canvas",
+    "levelOfEffort": "High"
+  },
+  {
+    "section": "Messaging",
+    "taskName": "Set Up Campaign Approval Workflows (Optional)",
+    "optional": "Y",
+    "description": "Campaign approval adds a review process to your workflow before launching a campaign, requiring key components including messages, delivery settings, target audience, and conversion events to be approved before a campaign can go live. Once enabled in Settings, user permissions must be configured to define who can approve or deny campaigns and Canvases, which can be applied at workspace or team level. This is particularly valuable for larger teams, regulated industries, or any organization where an additional layer of governance over outgoing communications is required.",
+    "requiredStakeholders": "Admin: primary owner; enables the approval workflow and configures the relevant user permissions\nMarketing Lead: defines who should have approval rights and what the approval process should look like for your team",
+    "desiredOutcomes": "An approval workflow is in place that ensures every campaign and Canvas is reviewed and signed off before launch, reducing the risk of errors reaching your customers\nApproval permissions are correctly assigned so the right people are empowered to review and approve campaigns without creating unnecessary bottlenecks in your team's workflow",
+    "resources": "https://www.braze.com/docs/user_guide/messaging/governance/approvals",
+    "levelOfEffort": "Low"
+  },
+  {
+    "section": "Analytics",
+    "taskName": "Set Up Reporting",
+    "optional": "Y",
+    "description": "Braze provides a suite of out-of-the-box reporting tools that give your team visibility into campaign and Canvas performance, channel engagement, and audience behaviour. Report Builder lets you compare performance across unlimited campaigns and Canvases in a single view, using tag-based reporting to group similar campaigns and track performance trends over customizable date ranges. Dashboard Builder allows you to create custom visual analytics dashboards from scratch or from Braze-supplied templates, powered by either a no-code Report Builder data source or a SQL Query Builder data source. This task involves setting up the reports and dashboards your team will use on an ongoing basis, ensuring the right metrics are visible to the right people from go-live.",
+    "requiredStakeholders": "Marketing Lead: defines which metrics and KPIs should be tracked and how reporting should be structured across teams\nMarketing End-Users: primary owner; builds and maintains reports and dashboards in the Braze dashboard",
+    "desiredOutcomes": "A set of reports and dashboards is configured in Braze before go-live, giving your team immediate visibility into campaign and Canvas performance from the first send\nReporting is structured around the KPIs and campaign types that matter most to your business, enabling your team to make data-driven decisions from day one",
+    "resources": "https://www.braze.com/docs/user_guide/analytics/reports\nhttps://www.braze.com/docs/user_guide/analytics/dashboards/dashboard_builder",
+    "levelOfEffort": "Medium"
+  }
+]
+;
+
+export function enterprisePlatinumTasksBySection(section: string): EnterprisePlatinumTaskRow[] {
+  return ENTERPRISE_PLATINUM_TASKS.filter((t) => t.section === section);
+}

@@ -74,9 +74,12 @@ export async function getMongoCollections() {
   const db = await getMongoDb();
   const configsCollectionName = process.env.MONGODB_CONFIGS_COLLECTION?.trim() || "configs";
   const tilesCollectionName = process.env.MONGODB_TILES_COLLECTION?.trim() || "tiles";
+  const ganttTasksCollectionName =
+    process.env.MONGODB_GANTT_TASKS_COLLECTION?.trim() || "gantt_tasks";
   const assetsCollectionName = process.env.MONGODB_ASSETS_COLLECTION?.trim() || "config_assets";
   const configs = db.collection(configsCollectionName);
   const tiles = db.collection(tilesCollectionName);
+  const ganttTasks = db.collection(ganttTasksCollectionName);
   const assets = db.collection(assetsCollectionName);
 
   if (!global.__mongoIndexesPromise) {
@@ -88,6 +91,9 @@ export async function getMongoCollections() {
         tiles.createIndex({ ID: 1 }, { unique: true }),
         tiles.createIndex({ Config_ID: 1 }),
         tiles.createIndex({ Config_ID: 1, Title_ID: 1 }),
+        ganttTasks.createIndex({ ID: 1 }, { unique: true }),
+        ganttTasks.createIndex({ Config_ID: 1 }),
+        ganttTasks.createIndex({ Config_ID: 1, Tile_ID: 1 }, { unique: true }),
         assets.createIndex({ Config_ID: 1, Asset_Type: 1 }, { unique: true }),
       ]);
 
@@ -122,6 +128,7 @@ export async function getMongoCollections() {
     db,
     configs,
     tiles,
+    ganttTasks,
     assets,
   };
 }

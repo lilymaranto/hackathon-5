@@ -1,4 +1,8 @@
 import { getTileTimelineUnits } from "@/lib/timeline-units";
+import {
+  maxPlanWeekSpanFromStart,
+  usesPlanTaskGanttWeekGrid,
+} from "@/lib/plan-task-gantt-timeline";
 import type { PlanOptionId, TileRecord } from "@/lib/types";
 
 /**
@@ -56,6 +60,9 @@ export function maxResizableSpanWeeks(
   durationWeeks: number,
   timelineColumns: number,
 ): number {
+  if (usesPlanTaskGanttWeekGrid(planOptionId, tile)) {
+    return maxPlanWeekSpanFromStart(planOptionId, tile.Start_Week);
+  }
   const { startUnit } = getTileTimelineUnits(planOptionId, tile, durationWeeks);
   const bigEnd = Math.min(
     getTileTimelineUnits(planOptionId, { ...tile, Span_Weeks: 999999 }, durationWeeks).endUnit,
@@ -71,19 +78,35 @@ export function clampBrazeCoreSpanWeeks(args: {
   durationWeeks: number;
   timelineColumns: number;
   requested: number;
+  /** When set (Enterprise Platinum plan tasks), overrides template-based minimum span. */
+  minSpanWeeks?: number;
+  /** When set (Enterprise Platinum plan tasks), cap resize at template (week-mark) span. */
+  maxSpanWeeks?: number;
 }): number {
   if (args.tile.Category === "milestone") {
     return args.tile.Span_Weeks;
   }
 
-  const minS = args.tile.Tile_ID.startsWith("custom_")
-    ? 1
-    : brazeCoreMinSpanFromTemplateSpan(args.templateSpanWeeks, args.planOptionId);
-  const maxS = maxResizableSpanWeeks(
-    args.planOptionId,
-    args.tile,
-    args.durationWeeks,
-    args.timelineColumns,
+  const planMin =
+    args.minSpanWeeks ??
+    (args.tile.ganttMinSpanWeeks !== undefined && args.tile.ganttMinSpanWeeks > 0
+      ? args.tile.ganttMinSpanWeeks
+      : undefined);
+
+  const minS =
+    planMin !== undefined
+      ? planMin
+      : args.tile.Tile_ID.startsWith("custom_")
+        ? 1
+        : brazeCoreMinSpanFromTemplateSpan(args.templateSpanWeeks, args.planOptionId);
+  const maxS = Math.min(
+    args.maxSpanWeeks ?? Number.POSITIVE_INFINITY,
+    maxResizableSpanWeeks(
+      args.planOptionId,
+      args.tile,
+      args.durationWeeks,
+      args.timelineColumns,
+    ),
   );
   if (maxS < minS) return maxS;
   return Math.min(maxS, Math.max(minS, Math.round(args.requested)));

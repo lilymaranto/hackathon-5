@@ -99,6 +99,7 @@ export {
   getAiDecisioningStudioSeedTemplate,
   getSeedTemplate,
   getTimelineConfig,
+  isEnterprisePlatinumGridPlan,
   ENTERPRISE_PLATINUM_COLUMNS_PER_MONTH,
   ENTERPRISE_PLATINUM_MONTH_COUNT,
   ENTERPRISE_PLATINUM_TIMELINE_COLUMNS,
@@ -111,6 +112,13 @@ export {
   QUICKSTART_GOLD_TIMELINE_COLUMNS,
   TIMELINE_CONFIGS,
 } from "@/lib/templates";
+
+export {
+  ENTERPRISE_PLATINUM_TASKS,
+  ENTERPRISE_PLATINUM_TASK_SECTIONS,
+  enterprisePlatinumTasksBySection,
+  type EnterprisePlatinumTaskRow,
+} from "@/lib/enterprise-platinum-task-list";
 
 /** Growth Silver: grid columns per plan week (swimlane / Gantt). */
 export const GROWTH_SILVER_COLUMNS_PER_WEEK = 8;
@@ -146,14 +154,10 @@ export const WORKSTREAMS: Array<{ id: Workstream; label: string; color: string }
     { id: "governance", label: "Project Management & Governance", color: "#FFA524" },
     { id: "data", label: "Data", color: "#FFA4FB" },
     { id: "tech", label: "Technical Integration", color: "#C85EB5" },
-    /**
-     * Campaign sits above channels; colors follow the **previous** stack order (orange → pink → … → email → SMS → WA → campaign → enablement)
-     * so each hue shifts one step: campaign = old email, email = old SMS, SMS = old WA, WA = old campaign.
-     */
-    { id: "campaign", label: "Campaign Build", color: "#91186E" },
-    { id: "email", label: "Email", color: "#8B1A91" },
-    { id: "sms", label: "SMS", color: "#861CB4" },
-    { id: "whatsapp", label: "WhatsApp", color: "#801ED7" },
+    { id: "email", label: "Email", color: "#91186E" },
+    { id: "sms", label: "SMS", color: "#8B1A91" },
+    { id: "whatsapp", label: "WhatsApp", color: "#861CB4" },
+    { id: "campaign", label: "Campaign Build", color: "#801ED7" },
     { id: "enablement", label: "Enablement", color: "#300266" },
   ];
 
@@ -164,6 +168,7 @@ export const PLAN_OPTIONS: ReadonlyArray<{
   durationWeeks: PlanDurationWeeks;
 }> = [
   { id: "12_week", label: "Enterprise Platinum", durationWeeks: 48 },
+  { id: "enterprise_gold", label: "Enterprise Gold", durationWeeks: 48 },
   { id: "ignite_gold", label: "Ignite Gold", durationWeeks: 20 },
   { id: "ignite_silver", label: "Ignite Silver", durationWeeks: 40 },
   { id: "quickstart_gold", label: "Quickstart Gold", durationWeeks: 24 },

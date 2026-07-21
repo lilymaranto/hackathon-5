@@ -12,6 +12,12 @@ type Props = {
   timelineColumns: number;
   /** Server / template span used for minimum-duration rules. */
   templateSpanWeeks: number;
+  /** Enterprise Platinum plan grid minimum (`Min_Span_Weeks`). */
+  minSpanWeeks?: number;
+  /** Enterprise Platinum: max span from week-mark template (initial `Span_Weeks`). */
+  maxSpanWeeks?: number;
+  /** When set, pointer resize steps use this column count (e.g. 28 plan weeks on a 48-col rail). */
+  spanResizeDragColumns?: number;
   getTimelineWidthPx: () => number;
   onSpanChange: (nextSpan: number) => void;
   /** Tailwind height class to match the tile bar (`h-10` swimlane, `h-8` gantt). */
@@ -33,7 +39,10 @@ export function BrazeCoreSpanResizeHandle({
   durationWeeks,
   timelineColumns,
   templateSpanWeeks,
+  minSpanWeeks,
+  maxSpanWeeks,
   getTimelineWidthPx,
+  spanResizeDragColumns,
   onSpanChange,
   heightClass,
   mode = "braze",
@@ -62,12 +71,14 @@ export function BrazeCoreSpanResizeHandle({
               durationWeeks,
               timelineColumns,
               requested: rawSpan,
+              minSpanWeeks,
+              maxSpanWeeks,
             });
       if (next === lastSpanRef.current) return;
       lastSpanRef.current = next;
       onSpanChange(next);
     },
-    [durationWeeks, mode, planOptionId, templateSpanWeeks, tile, timelineColumns, onSpanChange],
+    [durationWeeks, mode, planOptionId, spanResizeDragColumns, templateSpanWeeks, minSpanWeeks, maxSpanWeeks, tile, timelineColumns, onSpanChange],
   );
 
   const onPointerDown = useCallback(
@@ -84,7 +95,7 @@ export function BrazeCoreSpanResizeHandle({
 
       const weekW = Math.max(
         1,
-        getTimelineWidthPx() / Math.max(1, timelineColumns),
+        getTimelineWidthPx() / Math.max(1, spanResizeDragColumns ?? timelineColumns),
       );
 
       const onMove = (ev: PointerEvent) => {

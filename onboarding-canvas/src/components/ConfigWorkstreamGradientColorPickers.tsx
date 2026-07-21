@@ -1,15 +1,15 @@
 "use client";
 
 import { useOptionalBrandExtract } from "@/components/brand/brand-extract-context";
-import { WORKSTREAMS } from "@/lib/constants";
+import { BRAZE_WORKSTREAM_RAIL_PALETTE } from "@/lib/workstream-gradient";
 import type { BrandColorFieldId } from "@/lib/brand-color-drag";
 import { handleColorDragOver, handleColorDrop } from "@/lib/droppable-color-zone";
 import { parseHexColorOptional } from "@/lib/tile-category-colors";
 import clsx from "clsx";
 import { useState } from "react";
 
-const DEFAULT_TOP = WORKSTREAMS[0]!.color;
-const DEFAULT_BOTTOM = WORKSTREAMS[WORKSTREAMS.length - 1]!.color;
+const DEFAULT_TOP = BRAZE_WORKSTREAM_RAIL_PALETTE[0]!;
+const DEFAULT_BOTTOM = BRAZE_WORKSTREAM_RAIL_PALETTE[BRAZE_WORKSTREAM_RAIL_PALETTE.length - 1]!;
 
 type HalfProps = {
   title: string;

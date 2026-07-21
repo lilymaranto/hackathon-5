@@ -5,10 +5,12 @@ import {
   AI_DECISIONING_STUDIO_TEAM_ROWS,
   getTileLibraryEntry,
 } from "@/lib/constants";
+import { isEnterprisePlatinumGanttTile } from "@/lib/enterprise-platinum-gantt";
 import {
   committedBulletTextMatchesLibrary,
   committedResourcesTextMatchesLibrary,
   libraryResourceLinksToEditableText,
+  resourceLinksFromSheetText,
   linesToEditableBulletText,
   mergeLinesPreferSheet,
   parseBulletLines,
@@ -43,7 +45,7 @@ import {
   ListChecks,
   NotepadText,
   PartyPopper,
-  Target,
+  ListTodo,
   Trash2,
   Users,
   X,
@@ -85,10 +87,9 @@ type Props = {
   onDrawerTitleCommit: (title: string) => void;
   /** In-memory description edits (double-click description); merged in parent until Save. */
   onDrawerDescriptionCommit: (description: string) => void;
-  onDrawerAgendaCommit: (value: string) => void;
+  onDrawerAgendaOutcomesCommit: (value: string) => void;
   onDrawerAttendeesCommit: (value: string) => void;
-  onDrawerResourcesCommit: (value: string) => void;
-  onDrawerDesiredOutcomesCommit: (value: string) => void;
+  onDrawerRelatedTasksCommit: (value: string) => void;
   onDrawerLevelOfEffortCommit: (value: string) => void;
   onDrawerActivityLedCommit: (value: CustomerActivityLed) => void;
   /** Braze Core: all tiles; AI Decisioning: custom tiles only. Opens confirmation in parent. */
@@ -417,12 +418,14 @@ function EditableLevelOfEffortSection({
   aiDecisioningTypography,
   onCommit,
   editorKey,
+  title = "Level of Effort",
 }: {
   sheetText: string;
   readOnly?: boolean;
   aiDecisioningTypography?: boolean;
   onCommit: (value: string) => void;
   editorKey: string;
+  title?: string;
 }) {
   const displayText = sheetText.trim();
   const [editing, setEditing] = useState(false);
@@ -489,7 +492,7 @@ function EditableLevelOfEffortSection({
   return (
     <IconSection
       icon={Clock}
-      title="Level of Effort"
+      title={title}
       titleClassName={sectionTitle}
       titleOnDoubleClick={readOnly ? undefined : startEdit}
       titleDoubleClickHint={readOnly ? undefined : "Double-click to edit level of effort"}
@@ -741,6 +744,96 @@ function EditableResourcesSection({
   );
 }
 
+function EditablePlatinumGanttResourcesSection({
+  sheetText,
+  onCommit,
+  readOnly,
+  editorKey,
+}: {
+  sheetText: string | undefined;
+  onCommit: (value: string) => void;
+  readOnly?: boolean;
+  editorKey: string;
+}) {
+  const links = useMemo(() => resourceLinksFromSheetText(sheetText), [sheetText]);
+  const editSeed = useMemo(() => String(sheetText ?? "").trimEnd(), [sheetText]);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(editSeed);
+
+  useEffect(() => {
+    setEditing(false);
+  }, [editorKey]);
+
+  useEffect(() => {
+    if (!editing) setDraft(editSeed);
+  }, [editSeed, editing]);
+
+  const bodyText = "text-sm";
+  const sectionTitle = "text-base";
+
+  const startEdit = () => {
+    if (readOnly) return;
+    setDraft(editSeed);
+    setEditing(true);
+  };
+
+  if (readOnly) {
+    return (
+      <IconSection icon={BookOpen} title="Resources" titleClassName={sectionTitle}>
+        <LinksSectionBody items={links} itemClassName={bodyText} />
+      </IconSection>
+    );
+  }
+
+  if (editing) {
+    return (
+      <IconSection icon={BookOpen} title="Resources" titleClassName={sectionTitle}>
+        <textarea
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          autoFocus
+          rows={6}
+          aria-label="Edit resources"
+          placeholder="One URL per line…"
+          className={clsx(
+            "mt-3 w-full resize-y rounded-lg border border-[#d4c9f6] bg-white px-3 py-2.5 text-[#2F2354] shadow-inner outline-none focus:border-[#8b30e7]",
+            bodyText,
+            "min-h-[6rem]",
+          )}
+          onBlur={() => {
+            onCommit(draft);
+            setEditing(false);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              setDraft(editSeed);
+              setEditing(false);
+            }
+          }}
+        />
+      </IconSection>
+    );
+  }
+
+  return (
+    <IconSection
+      icon={BookOpen}
+      title="Resources"
+      titleClassName={sectionTitle}
+      titleOnDoubleClick={startEdit}
+      titleDoubleClickHint="Double-click to edit resources"
+    >
+      <div
+        className="cursor-text rounded-sm outline-offset-2 hover:bg-[#f6efff]/70"
+        onDoubleClick={startEdit}
+        title="Double-click to edit resources"
+      >
+        <LinksSectionBody items={links} itemClassName={bodyText} />
+      </div>
+    </IconSection>
+  );
+}
+
 function TileNotesSection({
   notesValue,
   onNotesCommit,
@@ -759,6 +852,7 @@ function TileNotesSection({
   activityLedPartnerLabel,
   onActivityLedChange,
   activityLedReadOnly,
+  hideNotes = false,
 }: {
   notesValue: string;
   onNotesCommit: (value: string) => void;
@@ -777,6 +871,8 @@ function TileNotesSection({
   activityLedPartnerLabel?: string;
   onActivityLedChange?: (value: CustomerActivityLed) => void;
   activityLedReadOnly?: boolean;
+  /** Enterprise Platinum plan Gantt: hide free-form notes; keep Save / Delete actions. */
+  hideNotes?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(notesValue);
@@ -826,9 +922,14 @@ function TileNotesSection({
   }
 
   return (
-    <IconSection icon={NotepadText} title="Notes" titleClassName={sectionTitle}>
+    <IconSection
+      icon={NotepadText}
+      title={hideNotes ? "Actions" : "Notes"}
+      titleClassName={sectionTitle}
+    >
       <div className="relative">
-        {readOnly ? (
+        {!hideNotes ? (
+          readOnly ? (
           <textarea
             value={notesValue}
             readOnly
@@ -882,9 +983,10 @@ function TileNotesSection({
               <p className="text-[#b8aed4]">{placeholder}</p>
             )}
           </div>
-        )}
+        )
+        ) : null}
         {!readOnly ? (
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+          <div className={clsx("flex flex-wrap items-center justify-between gap-2", !hideNotes && "mt-2")}>
             {showActivityLedToggle &&
             activityLed &&
             activityLedCustomerLabel &&
@@ -1151,58 +1253,41 @@ function CustomerActivityLedToggle({
 
 function StandardDrawerBody({
   tile,
-  library,
   showAdsDecisioningAttendees,
   onNavigateToCustomerRolesChart,
   brazeAttendeeJump,
   aiDecisioningTypography,
   readOnly,
   onDescriptionCommit,
-  onAgendaCommit,
+  onAgendaOutcomesCommit,
   onAttendeesCommit,
-  onResourcesCommit,
-  onDesiredOutcomesCommit,
+  onRelatedTasksCommit,
   onLevelOfEffortCommit,
   editorKey,
 }: {
   tile: TileRecord;
-  library: TileLibraryEntry;
   showAdsDecisioningAttendees: boolean;
   onNavigateToCustomerRolesChart?: () => void;
   brazeAttendeeJump?: BrazeAttendeeJumpConfig;
   aiDecisioningTypography?: boolean;
   readOnly?: boolean;
   onDescriptionCommit: (value: string) => void;
-  onAgendaCommit: (value: string) => void;
+  onAgendaOutcomesCommit: (value: string) => void;
   onAttendeesCommit: (value: string) => void;
-  onResourcesCommit: (value: string) => void;
-  onDesiredOutcomesCommit: (value: string) => void;
+  onRelatedTasksCommit: (value: string) => void;
   onLevelOfEffortCommit: (value: string) => void;
   editorKey: string;
 }) {
   return (
     <div className="mt-8 text-[#2F2354]">
       <EditableDescriptionSection
-        libraryDescription={library.description}
+        libraryDescription=""
         sheetDescription={tile.Description ?? ""}
         readOnly={readOnly}
         aiDecisioningTypography={aiDecisioningTypography}
         onCommit={onDescriptionCommit}
         editorKey={editorKey}
       />
-
-      {tile.Category !== "customer_activity" ? (
-        <EditableBulletListSection
-          icon={Calendar}
-          title="Agenda"
-          libraryLines={library.agenda}
-          sheetText={tile.Agenda}
-          onCommit={onAgendaCommit}
-          readOnly={readOnly}
-          editorKey={editorKey}
-          aiDecisioningTypography={aiDecisioningTypography}
-        />
-      ) : null}
 
       {showAdsDecisioningAttendees ? (
         <IconSection
@@ -1219,7 +1304,7 @@ function StandardDrawerBody({
       <EditableBulletListSection
         icon={Users}
         title="Suggested Attendees"
-        libraryLines={library.suggested_attendees}
+        libraryLines={[]}
         sheetText={tile.Attendees}
         onCommit={onAttendeesCommit}
         readOnly={readOnly}
@@ -1229,20 +1314,22 @@ function StandardDrawerBody({
       />
 
       <EditableBulletListSection
-        icon={Target}
-        title="Desired Outcomes"
-        libraryLines={library.desired_outcomes}
-        sheetText={tile.Desired_Outcomes}
-        onCommit={onDesiredOutcomesCommit}
+        icon={Calendar}
+        title="Agenda & Outcomes"
+        libraryLines={[]}
+        sheetText={tile.Agenda_Outcomes}
+        onCommit={onAgendaOutcomesCommit}
         readOnly={readOnly}
         editorKey={editorKey}
         aiDecisioningTypography={aiDecisioningTypography}
       />
 
-      <EditableResourcesSection
-        tileResources={tile.Resources}
-        library={library}
-        onCommit={onResourcesCommit}
+      <EditableBulletListSection
+        icon={ListTodo}
+        title="Related Tasks"
+        libraryLines={[]}
+        sheetText={tile.Related_Tasks}
+        onCommit={onRelatedTasksCommit}
         readOnly={readOnly}
         editorKey={editorKey}
         aiDecisioningTypography={aiDecisioningTypography}
@@ -1258,6 +1345,73 @@ function StandardDrawerBody({
         />
       ) : null}
 
+    </div>
+  );
+}
+
+function EnterprisePlatinumPlanGanttDrawerBody({
+  tile,
+  readOnly,
+  onDescriptionCommit,
+  onAttendeesCommit,
+  onAgendaOutcomesCommit,
+  onRelatedTasksCommit,
+  onLevelOfEffortCommit,
+  editorKey,
+}: {
+  tile: TileRecord;
+  readOnly?: boolean;
+  onDescriptionCommit: (value: string) => void;
+  onAttendeesCommit: (value: string) => void;
+  onAgendaOutcomesCommit: (value: string) => void;
+  onRelatedTasksCommit: (value: string) => void;
+  onLevelOfEffortCommit: (value: string) => void;
+  editorKey: string;
+}) {
+  return (
+    <div className="mt-8 text-[#2F2354]">
+      <EditableDescriptionSection
+        libraryDescription=""
+        sheetDescription={tile.Description ?? ""}
+        readOnly={readOnly}
+        onCommit={onDescriptionCommit}
+        editorKey={editorKey}
+      />
+
+      <EditableBulletListSection
+        icon={Users}
+        title="Required Stakeholders"
+        libraryLines={[]}
+        sheetText={tile.Attendees}
+        onCommit={onAttendeesCommit}
+        readOnly={readOnly}
+        editorKey={editorKey}
+      />
+
+      <EditableBulletListSection
+        icon={ListChecks}
+        title="Desired Outcomes"
+        libraryLines={[]}
+        sheetText={tile.Agenda_Outcomes}
+        onCommit={onAgendaOutcomesCommit}
+        readOnly={readOnly}
+        editorKey={editorKey}
+      />
+
+      <EditablePlatinumGanttResourcesSection
+        sheetText={tile.Related_Tasks}
+        onCommit={onRelatedTasksCommit}
+        readOnly={readOnly}
+        editorKey={editorKey}
+      />
+
+      <EditableLevelOfEffortSection
+        sheetText={tile.Level_Of_Effort ?? ""}
+        readOnly={readOnly}
+        onCommit={onLevelOfEffortCommit}
+        editorKey={editorKey}
+        title="Level of Effort (Low, Medium, High)"
+      />
     </div>
   );
 }
@@ -1278,18 +1432,16 @@ export function TileDrawer({
   drawerContentDirty = true,
   onDrawerTitleCommit,
   onDrawerDescriptionCommit,
-  onDrawerAgendaCommit,
+  onDrawerAgendaOutcomesCommit,
   onDrawerAttendeesCommit,
-  onDrawerResourcesCommit,
-  onDrawerDesiredOutcomesCommit,
+  onDrawerRelatedTasksCommit,
   onDrawerLevelOfEffortCommit,
   onDrawerActivityLedCommit,
   showDeleteTile,
   onDeleteTilePress,
   deleteTilePending,
 }: Props) {
-  const library = tile ? getTileLibraryEntry(tile.Tile_ID) : null;
-
+  const isPlanGanttTask = !!tile && isEnterprisePlatinumGanttTile(tile);
   const lockTileCopy = readOnly || guestMode;
   const lockNotes = readOnly && !guestMode;
 
@@ -1389,11 +1541,23 @@ export function TileDrawer({
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-14 pt-2">
-          {tile && library &&
+          {tile && isPlanGanttTask ? (
+            <EnterprisePlatinumPlanGanttDrawerBody
+              tile={tile}
+              readOnly={lockTileCopy}
+              onDescriptionCommit={onDrawerDescriptionCommit}
+              onAttendeesCommit={onDrawerAttendeesCommit}
+              onAgendaOutcomesCommit={onDrawerAgendaOutcomesCommit}
+              onRelatedTasksCommit={onDrawerRelatedTasksCommit}
+              onLevelOfEffortCommit={onDrawerLevelOfEffortCommit}
+              editorKey={notesEditorKey}
+            />
+          ) : null}
+          {tile && !isPlanGanttTask &&
             (tile.Category === "milestone" ? (
               <MilestoneDrawerBody
                 tile={tile}
-                library={library}
+                library={getTileLibraryEntry(tile.Tile_ID)}
                 showAdsDecisioningAttendees={showAdsDecisioningAttendees}
                 onNavigateToCustomerRolesChart={onNavigateToCustomerRolesChart}
                 brazeAttendeeJump={brazeAttendeeJump}
@@ -1406,17 +1570,15 @@ export function TileDrawer({
             ) : (
               <StandardDrawerBody
                 tile={tile}
-                library={library}
                 showAdsDecisioningAttendees={showAdsDecisioningAttendees}
                 onNavigateToCustomerRolesChart={onNavigateToCustomerRolesChart}
                 brazeAttendeeJump={brazeAttendeeJump}
                 aiDecisioningTypography={aiDecisioningTypography}
                 readOnly={lockTileCopy}
                 onDescriptionCommit={onDrawerDescriptionCommit}
-                onAgendaCommit={onDrawerAgendaCommit}
+                onAgendaOutcomesCommit={onDrawerAgendaOutcomesCommit}
                 onAttendeesCommit={onDrawerAttendeesCommit}
-                onResourcesCommit={onDrawerResourcesCommit}
-                onDesiredOutcomesCommit={onDrawerDesiredOutcomesCommit}
+                onRelatedTasksCommit={onDrawerRelatedTasksCommit}
                 onLevelOfEffortCommit={onDrawerLevelOfEffortCommit}
                 editorKey={notesEditorKey}
               />
@@ -1434,12 +1596,13 @@ export function TileDrawer({
               showDeleteTile={showDeleteTile}
               onDeleteTilePress={onDeleteTilePress}
               deleteTilePending={deleteTilePending}
-              showActivityLedToggle={showCustomerActivityLedToggle}
+              showActivityLedToggle={showCustomerActivityLedToggle && !isPlanGanttTask}
               activityLed={drawerActivityLed}
               activityLedCustomerLabel={activityLedLabels.customer}
               activityLedPartnerLabel={activityLedLabels.partner}
               onActivityLedChange={onDrawerActivityLedCommit}
               activityLedReadOnly={lockTileCopy}
+              hideNotes={false}
             />
           ) : null}
         </div>

@@ -561,6 +561,11 @@ const STANDARD_12_WEEK_TEMPLATE: SeedTemplateTile[] = withDefaultStackOrder([
 
   ]);
 
+/** Enterprise Gold — same swimlane seed as Platinum until the plans diverge. */
+const ENTERPRISE_GOLD_TEMPLATE: SeedTemplateTile[] = STANDARD_12_WEEK_TEMPLATE.map((tile) => ({
+  ...tile,
+}));
+
 export const TIMELINE_CONFIGS: Record<PlanOptionId, TimelineConfig> = {
   growth_silver: {
     phases: [
@@ -608,7 +613,22 @@ export const TIMELINE_CONFIGS: Record<PlanOptionId, TimelineConfig> = {
       { name: "Month 3", span: 8 },
       { name: "Month 4", span: 8 },
       { name: "Month 5", span: 8 },
-      { name: "Month 6", span: 8 },
+      { name: "Month 6-7", span: 8 },
+    ],
+  },
+  enterprise_gold: {
+    phases: [
+      { name: "Discovery & Planning", span: 16 },
+      { name: "Execution", span: 24 },
+      { name: "Post Go-Live Support", span: 8 },
+    ],
+    months: [
+      { name: "Month 1", span: 8 },
+      { name: "Month 2", span: 8 },
+      { name: "Month 3", span: 8 },
+      { name: "Month 4", span: 8 },
+      { name: "Month 5", span: 8 },
+      { name: "Month 6-7", span: 8 },
     ],
   },
   quickstart_gold: {
@@ -666,9 +686,16 @@ export function getSeedTemplate(planOptionId: PlanOptionId): SeedTemplateTile[] 
           ? IGNITE_SILVER_TEMPLATE
           : planOptionId === "ignite_gold"
           ? IGNITE_GOLD_TEMPLATE
-          : planOptionId === "quickstart_gold"
-            ? QUICKSTART_GOLD_TEMPLATE
-            : STANDARD_12_WEEK_TEMPLATE;
+            : planOptionId === "quickstart_gold"
+              ? QUICKSTART_GOLD_TEMPLATE
+              : planOptionId === "enterprise_gold"
+                ? ENTERPRISE_GOLD_TEMPLATE
+                : STANDARD_12_WEEK_TEMPLATE;
 
   return baseTemplate.map((tile) => ({ ...tile }));
+}
+
+/** 48-column (8×6 month) Enterprise Platinum / Gold **swimlane** grid. */
+export function isEnterprisePlatinumGridPlan(planOptionId: PlanOptionId): boolean {
+  return planOptionId === "12_week" || planOptionId === "enterprise_gold";
 }

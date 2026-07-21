@@ -1,7 +1,7 @@
 import { CanvasBoard } from "@/components/CanvasBoard";
 import { formatConfigPlanHeading } from "@/lib/constants";
 import { fetchConfigById } from "@/lib/caboodle";
-import { TileRecord } from "@/lib/types";
+import { TileRecord, GanttTaskRecord } from "@/lib/types";
 import { notFound } from "next/navigation";
 
 async function getTiles(configId: string) {
@@ -14,6 +14,16 @@ async function getTiles(configId: string) {
   return payload.data ?? [];
 }
 
+async function getGanttTasks(configId: string) {
+  const baseUrl = process.env.AUTH_URL || "http://localhost:3000";
+  const response = await fetch(`${baseUrl}/api/gantt-tasks?configId=${configId}`, {
+    cache: "no-store",
+  });
+  if (!response.ok) return [];
+  const payload = (await response.json()) as { data?: GanttTaskRecord[] };
+  return payload.data ?? [];
+}
+
 export default async function PublicConfigPage({
   params,
 }: {
@@ -23,6 +33,7 @@ export default async function PublicConfigPage({
   const config = await fetchConfigById(configId);
   if (!config) notFound();
   const tiles = await getTiles(configId);
+  const ganttTasks = await getGanttTasks(configId);
   const planTitle = formatConfigPlanHeading(config);
 
   return (
@@ -30,6 +41,7 @@ export default async function PublicConfigPage({
       <CanvasBoard
         config={config}
         tiles={tiles}
+        ganttTasks={ganttTasks}
         customerPasswordView
         topToolbarTitle={planTitle}
       />

@@ -67,7 +67,7 @@ function useRailLayout(
         left: rr.left - tr.left,
         top: rr.top - tr.top,
         width: rr.width,
-        height: Math.max(track.clientHeight, track.scrollHeight),
+        height: track.clientHeight,
       });
     };
     update();
@@ -209,9 +209,9 @@ export function TimelineAnnotationsShell({
 
   return (
     <TimelineAnnotationsContext.Provider value={ctx}>
-      <div ref={trackRef} className="relative">
+      <div ref={trackRef} className="relative w-full overflow-hidden">
         <AnnotationRailVisuals readOnly={readOnly} />
-        <div className="relative z-[15]">{children}</div>
+        <div className="relative z-[15] w-full">{children}</div>
         <AnnotationRailInteraction readOnly={readOnly} />
         <AnnotationLabels readOnly={readOnly} />
       </div>
@@ -232,7 +232,7 @@ function AnnotationRailVisuals({ readOnly }: { readOnly: boolean }) {
         left: railBox.left,
         top: 0,
         width: railBox.width,
-        height: railBox.height,
+        bottom: 0,
       }}
     >
       {doc.annotations.map((a) => {
@@ -407,7 +407,7 @@ function AnnotationRailInteraction({ readOnly }: { readOnly: boolean }) {
         left: railBox.left,
         top: 0,
         width: railBox.width,
-        height: railBox.height,
+        bottom: 0,
       }}
     >
       {doc.annotations.map((a) => {
@@ -646,7 +646,7 @@ function AnnotationLabels({ readOnly }: { readOnly: boolean }) {
         left: railBox.left,
         top: 0,
         width: railBox.width,
-        height: railBox.height,
+        bottom: 0,
       }}
     >
       {doc.annotations.map((a) => {

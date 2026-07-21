@@ -33,8 +33,8 @@ export async function PATCH(request: NextRequest) {
         Description?: string;
         Attendees?: string;
         Agenda?: string;
-        Resources?: string;
-        Desired_Outcomes?: string;
+        Agenda_Outcomes?: string;
+        Related_Tasks?: string;
         activityLed?: TileRecord["activityLed"];
         Level_Of_Effort?: string;
       }>;
@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
         Partial<
           Pick<
             TileRecord,
-            "Attendees" | "Agenda" | "Resources" | "Desired_Outcomes" | "activityLed" | "Level_Of_Effort"
+            "Attendees" | "Agenda_Outcomes" | "Related_Tasks" | "activityLed" | "Level_Of_Effort"
           >
         >;
     };
@@ -111,9 +111,8 @@ export async function POST(request: NextRequest) {
       Notes: t.Notes ?? "",
       Description: t.Description ?? "",
       Attendees: t.Attendees,
-      Agenda: t.Agenda,
-      Resources: t.Resources,
-      Desired_Outcomes: t.Desired_Outcomes,
+      Agenda_Outcomes: t.Agenda_Outcomes,
+      Related_Tasks: t.Related_Tasks,
     });
 
     return NextResponse.json({ data: { created: true } });

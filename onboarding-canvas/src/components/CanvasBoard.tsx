@@ -32,7 +32,7 @@ import {
   WORKSTREAMS,
   GROWTH_SILVER_COLUMNS_PER_WEEK,
   getTimelineConfig,
-  getTileLibraryEntry,
+  isEnterprisePlatinumGridPlan,
   isWorkstreamVisibleForChannels,
 } from "@/lib/constants";
 import {
@@ -58,19 +58,40 @@ import {
   type ResolvedTileCategoryColors,
 } from "@/lib/tile-category-colors";
 import {
-  committedBulletTextMatchesLibrary,
-  committedResourcesTextMatchesLibrary,
-} from "@/lib/tile-text-bullets";
+  buildEnterprisePlatinumGanttLaneLegendFromOrder,
+  ENTERPRISE_PLATINUM_GANTT_LANE_IDS,
+  platinumGanttLaneRailColor,
+  platinumGanttSectionLabelForLane,
+  ganttTaskToTileRecord,
+  isEnterprisePlatinumGanttTile,
+  isEnterprisePlatinumPlanGantt,
+  type EnterprisePlatinumGanttLaneId,
+} from "@/lib/enterprise-platinum-gantt";
+import {
+  platinumGanttTaskLayoutEditable,
+  weekMarksForPlatinumGanttTile,
+} from "@/lib/enterprise-platinum-gantt-week-marks";
+import {
+  planGanttTimelineColumnCount,
+  planGanttTimelineConfig,
+  planTabWeekCount,
+  timelineColumnToPlanWeek,
+} from "@/lib/plan-task-gantt-timeline";
 import { buildWorkstreamGradientColorMap } from "@/lib/workstream-gradient";
 import {
   brazeWorkstreamOrderIds,
   labelHexForWorkstreamTextType,
   mergeFullOrderAfterVisibleReorder,
   normalizeBrazeCoreWorkstreamOrder,
+  normalizeBrazeWorkstreamOrderForStorage,
   normalizeBrazeCoreWorkstreamIds,
+  platinumGanttLaneIdsFromOrder,
   railColorResolverForWorkstreamOrder,
   toggleWorkstreamLabelTextType,
-  workstreamLabelTextTypeFromRailHex,
+  usesDefaultBrazeWorkstreamBrandColors,
+  resolveWorkstreamLabelTextType,
+  explicitWorkstreamLabelTypeMapFromSaved,
+  BRAZE_WS_SORT_PREFIX,
 } from "@/lib/braze-workstream-order";
 import {
   buildTimelineDatesFromStart,
@@ -82,6 +103,7 @@ import {
 import {
   ConfigRecord,
   CustomerActivityLed,
+  GanttTaskRecord,
   PlanOptionId,
   TileCategory,
   TileRecord,
@@ -127,6 +149,8 @@ type Props = {
   config: ConfigRecord;
   /** Defaults to [] so dependency arrays / logs never read undefined.length (Fast Refresh edge cases). */
   tiles?: TileRecord[];
+  /** Enterprise Platinum Gantt task rows (`gantt_tasks` collection). */
+  ganttTasks?: GanttTaskRecord[];
   readOnly?: boolean;
   /**
    * Password / guest timeline (`/config/[id]`): drag tiles, save layout, edit notes; no + tile, no title/description edits, no span resize.
@@ -1140,8 +1164,6 @@ function AdsCustomerRolesChart() {
   );
 }
 
-const BRAZE_WS_SORT_PREFIX = "braze-ws-sort:";
-/** Braze Core swimlane view only: fixed left workstream label column width (px). */
 const BRAZE_CORE_SWIMLANE_RAIL_COL_PX = 125;
 const MIN_CONFIG_LOGO_HEIGHT_PX = 20;
 const MAX_CONFIG_LOGO_HEIGHT_PX = 60;
@@ -1212,6 +1234,7 @@ function BrazeCoreSwimlaneSortableRow(props: BrazeCoreSwimlaneSortableRowProps) 
 export function CanvasBoard({
   config,
   tiles = [],
+  ganttTasks = [],
   readOnly = false,
   customerPasswordView = false,
   topToolbarBackHref,
@@ -1228,12 +1251,9 @@ export function CanvasBoard({
   const [pendingNotesByUid, setPendingNotesByUid] = useState<Record<string, string>>({});
   const [pendingTitleByUid, setPendingTitleByUid] = useState<Record<string, string>>({});
   const [pendingDescriptionByUid, setPendingDescriptionByUid] = useState<Record<string, string>>({});
-  const [pendingAgendaByUid, setPendingAgendaByUid] = useState<Record<string, string>>({});
+  const [pendingAgendaOutcomesByUid, setPendingAgendaOutcomesByUid] = useState<Record<string, string>>({});
   const [pendingAttendeesByUid, setPendingAttendeesByUid] = useState<Record<string, string>>({});
-  const [pendingResourcesByUid, setPendingResourcesByUid] = useState<Record<string, string>>({});
-  const [pendingDesiredOutcomesByUid, setPendingDesiredOutcomesByUid] = useState<Record<string, string>>(
-    {},
-  );
+  const [pendingRelatedTasksByUid, setPendingRelatedTasksByUid] = useState<Record<string, string>>({});
   const [pendingActivityLedByUid, setPendingActivityLedByUid] = useState<
     Record<string, CustomerActivityLed>
   >({});
@@ -1306,6 +1326,8 @@ export function CanvasBoard({
   /** Measured rail width for drag math only — must NOT drive React state (ResizeObserver + heavy ADS tiles froze the tab). */
   const timelineWidthRef = useRef(1200);
   const isAiDecisioningStudio = config.Product_Type === "AI Decisioning Studio";
+  const usePlatinumPlanGantt =
+    !isAiDecisioningStudio && isEnterprisePlatinumPlanGantt(config.planOptionId);
   const showBrazeViewToggle = !isAiDecisioningStudio;
   /** Guest password view: layout + notes allowed even when not an employee session. */
   const allowLayoutAndDrawerEdits = !readOnly || customerPasswordView;
@@ -1329,25 +1351,33 @@ export function CanvasBoard({
   }, [toolbarLogoHeightPx]);
   /** Display name for chart keys (config `Title` in API / Caboodle). */
   const chartProspectLegendName = (config.Title ?? "").trim() || "Prospect";
-  const isEnterprisePlatinum = config.planOptionId === "12_week";
-  const durationWeeks = isAiDecisioningStudio
-    ? AI_DECISIONING_STUDIO_TIMELINE_WEEKS
-    : isEnterprisePlatinum
-      ? ENTERPRISE_PLATINUM_TIMELINE_COLUMNS
-      : config.Duration_Weeks || 12;
+  const isEnterprisePlatinum = isEnterprisePlatinumGridPlan(config.planOptionId);
+  const isPlanGanttView = usePlatinumPlanGantt && brazeCoreView === "gantt";
   const isGrowthSilver = config.planOptionId === "growth_silver";
   const isIgniteGold = config.planOptionId === "ignite_gold";
   const isIgniteSilverWide = config.planOptionId === "ignite_silver";
   const isQuickstartGold = config.planOptionId === "quickstart_gold";
   const isQuickstartSilverWide = config.planOptionId === "quickstart_silver";
+
+  const swimlaneDurationWeeks = isAiDecisioningStudio
+    ? AI_DECISIONING_STUDIO_TIMELINE_WEEKS
+    : isEnterprisePlatinum
+      ? ENTERPRISE_PLATINUM_TIMELINE_COLUMNS
+      : config.Duration_Weeks || 12;
+
   const timelineConfig = useMemo(() => getTimelineConfig(config.planOptionId), [config.planOptionId]);
-  const timelineColumns = useMemo(() => {
+  const activeTimelineConfig = useMemo(
+    () => (isPlanGanttView ? planGanttTimelineConfig(config.planOptionId) : timelineConfig),
+    [config.planOptionId, isPlanGanttView, timelineConfig],
+  );
+
+  const swimlaneTimelineColumns = useMemo(() => {
     if (isAiDecisioningStudio) return AI_DECISIONING_STUDIO_TIMELINE_WEEKS;
-    if (isGrowthSilver) return durationWeeks * GROWTH_SILVER_COLUMNS_PER_WEEK;
+    if (isGrowthSilver) return swimlaneDurationWeeks * GROWTH_SILVER_COLUMNS_PER_WEEK;
     if (isIgniteSilverWide) return IGNITE_SILVER_TIMELINE_COLUMNS;
     if (isIgniteGold) return timelineConfig.months.length * IGNITE_GOLD_COLUMNS_PER_MONTH;
     if (isQuickstartGold || isQuickstartSilverWide) return QUICKSTART_GOLD_TIMELINE_COLUMNS;
-    return durationWeeks;
+    return swimlaneDurationWeeks;
   }, [
     isAiDecisioningStudio,
     isGrowthSilver,
@@ -1355,24 +1385,47 @@ export function CanvasBoard({
     isIgniteSilverWide,
     isQuickstartGold,
     isQuickstartSilverWide,
-    durationWeeks,
+    swimlaneDurationWeeks,
     timelineConfig.months.length,
   ]);
+
+  const ganttTimelineColumns = useMemo(() => {
+    if (!isPlanGanttView) return swimlaneTimelineColumns;
+    return planGanttTimelineColumnCount(config.planOptionId);
+  }, [config.planOptionId, isPlanGanttView, swimlaneTimelineColumns]);
+
+  const ganttDurationWeeks = useMemo(() => {
+    if (!isPlanGanttView) return swimlaneDurationWeeks;
+    return planTabWeekCount(config.planOptionId);
+  }, [config.planOptionId, isPlanGanttView, swimlaneDurationWeeks]);
+
+  const durationWeeks = isPlanGanttView ? ganttDurationWeeks : swimlaneDurationWeeks;
+  const timelineColumns = isPlanGanttView ? ganttTimelineColumns : swimlaneTimelineColumns;
   const timelineColumnIndexes = useMemo(
     () => Array.from({ length: timelineColumns }, (_, index) => index + 1),
     [timelineColumns],
   );
-  const showMonthsRow = timelineConfig.months.length > 0;
+  const showMonthsRow = (isPlanGanttView ? activeTimelineConfig : timelineConfig).months.length > 0;
   const showWeeksRow = isGrowthSilver;
 
   const phaseGridSpans = useMemo(() => {
-    if (!isIgniteGold && !isIgniteSilverWide && !isQuickstartGold && !isQuickstartSilverWide)
-      return timelineConfig.phases.map((p) => p.span);
+    const cfg = isPlanGanttView ? activeTimelineConfig : timelineConfig;
+    if (
+      !isPlanGanttView &&
+      !isIgniteGold &&
+      !isIgniteSilverWide &&
+      !isQuickstartGold &&
+      !isQuickstartSilverWide
+    ) {
+      return cfg.phases.map((p) => p.span);
+    }
     return scaleWeekSpansToColumnSpans(
-      timelineConfig.phases.map((p) => p.span),
+      cfg.phases.map((p) => p.span),
       timelineColumns,
     );
   }, [
+    isPlanGanttView,
+    activeTimelineConfig,
     isIgniteGold,
     isIgniteSilverWide,
     isQuickstartGold,
@@ -1382,6 +1435,9 @@ export function CanvasBoard({
   ]);
 
   const monthGridSpans = useMemo(() => {
+    if (isPlanGanttView) {
+      return activeTimelineConfig.months.map((m) => m.span);
+    }
     if (!isIgniteGold && !isIgniteSilverWide && !isQuickstartGold && !isQuickstartSilverWide)
       return timelineConfig.months.map((m) => m.span);
     if (isQuickstartGold || isQuickstartSilverWide) {
@@ -1397,6 +1453,8 @@ export function CanvasBoard({
     isQuickstartGold,
     isQuickstartSilverWide,
     timelineConfig.months,
+    isPlanGanttView,
+    activeTimelineConfig.months,
   ]);
 
   const timelineGridBackground = useMemo((): CSSProperties => {
@@ -1675,44 +1733,53 @@ export function CanvasBoard({
     };
   }, [brazeCoreView, adsCanvasView]);
 
+  const ganttTilesFromServer = useMemo(
+    () => ganttTasks.map(ganttTaskToTileRecord),
+    [ganttTasks],
+  );
+
+  const allDrawerServerTiles = useMemo(
+    () => [...tiles, ...ganttTilesFromServer],
+    [tiles, ganttTilesFromServer],
+  );
+
   const serverNotesByUid = useMemo(
-    () => new Map(tiles.map((t) => [tileStableKey(t), t.Notes ?? ""])),
-    [tiles],
+    () => new Map(allDrawerServerTiles.map((t) => [tileStableKey(t), t.Notes ?? ""])),
+    [allDrawerServerTiles],
   );
 
   const serverTitleByUid = useMemo(
-    () => new Map(tiles.map((t) => [tileStableKey(t), t.Title])),
-    [tiles],
+    () => new Map(allDrawerServerTiles.map((t) => [tileStableKey(t), t.Title])),
+    [allDrawerServerTiles],
   );
 
   const serverDescriptionByUid = useMemo(
-    () => new Map(tiles.map((t) => [tileStableKey(t), t.Description ?? ""])),
-    [tiles],
+    () => new Map(allDrawerServerTiles.map((t) => [tileStableKey(t), t.Description ?? ""])),
+    [allDrawerServerTiles],
   );
 
-  const serverAgendaByUid = useMemo(
-    () => new Map(tiles.map((t) => [tileStableKey(t), t.Agenda ?? ""])),
-    [tiles],
+  const serverAgendaOutcomesByUid = useMemo(
+    () => new Map(allDrawerServerTiles.map((t) => [tileStableKey(t), t.Agenda_Outcomes ?? ""])),
+    [allDrawerServerTiles],
   );
   const serverAttendeesByUid = useMemo(
-    () => new Map(tiles.map((t) => [tileStableKey(t), t.Attendees ?? ""])),
+    () => new Map(allDrawerServerTiles.map((t) => [tileStableKey(t), t.Attendees ?? ""])),
     [tiles],
   );
-  const serverResourcesByUid = useMemo(
-    () => new Map(tiles.map((t) => [tileStableKey(t), t.Resources ?? ""])),
-    [tiles],
-  );
-  const serverDesiredOutcomesByUid = useMemo(
-    () => new Map(tiles.map((t) => [tileStableKey(t), t.Desired_Outcomes ?? ""])),
-    [tiles],
+  const serverRelatedTasksByUid = useMemo(
+    () => new Map(allDrawerServerTiles.map((t) => [tileStableKey(t), t.Related_Tasks ?? ""])),
+    [allDrawerServerTiles],
   );
   const serverActivityLedByUid = useMemo(
-    () => new Map(tiles.map((t) => [tileStableKey(t), parseCustomerActivityLed(t.activityLed)])),
-    [tiles],
+    () =>
+      new Map(
+        allDrawerServerTiles.map((t) => [tileStableKey(t), parseCustomerActivityLed(t.activityLed)]),
+      ),
+    [allDrawerServerTiles],
   );
   const serverLevelOfEffortByUid = useMemo(
-    () => new Map(tiles.map((t) => [tileStableKey(t), t.Level_Of_Effort ?? ""])),
-    [tiles],
+    () => new Map(allDrawerServerTiles.map((t) => [tileStableKey(t), t.Level_Of_Effort ?? ""])),
+    [allDrawerServerTiles],
   );
 
   const tileState = useMemo(
@@ -1728,17 +1795,14 @@ export function CanvasBoard({
         if (Object.prototype.hasOwnProperty.call(pendingDescriptionByUid, k)) {
           out = { ...out, Description: pendingDescriptionByUid[k]! };
         }
-        if (Object.prototype.hasOwnProperty.call(pendingAgendaByUid, k)) {
-          out = { ...out, Agenda: pendingAgendaByUid[k]! };
+        if (Object.prototype.hasOwnProperty.call(pendingAgendaOutcomesByUid, k)) {
+          out = { ...out, Agenda_Outcomes: pendingAgendaOutcomesByUid[k]! };
         }
         if (Object.prototype.hasOwnProperty.call(pendingAttendeesByUid, k)) {
           out = { ...out, Attendees: pendingAttendeesByUid[k]! };
         }
-        if (Object.prototype.hasOwnProperty.call(pendingResourcesByUid, k)) {
-          out = { ...out, Resources: pendingResourcesByUid[k]! };
-        }
-        if (Object.prototype.hasOwnProperty.call(pendingDesiredOutcomesByUid, k)) {
-          out = { ...out, Desired_Outcomes: pendingDesiredOutcomesByUid[k]! };
+        if (Object.prototype.hasOwnProperty.call(pendingRelatedTasksByUid, k)) {
+          out = { ...out, Related_Tasks: pendingRelatedTasksByUid[k]! };
         }
         if (Object.prototype.hasOwnProperty.call(pendingActivityLedByUid, k)) {
           out = { ...out, activityLed: pendingActivityLedByUid[k]! };
@@ -1753,11 +1817,49 @@ export function CanvasBoard({
       editsByUid,
       pendingTitleByUid,
       pendingDescriptionByUid,
-      pendingAgendaByUid,
+      pendingAgendaOutcomesByUid,
       pendingAttendeesByUid,
-      pendingResourcesByUid,
-      pendingDesiredOutcomesByUid,
+      pendingRelatedTasksByUid,
       pendingActivityLedByUid,
+      pendingLevelOfEffortByUid,
+    ],
+  );
+
+  const ganttPlanTileState = useMemo(
+    () =>
+      ganttTilesFromServer.map((tile) => {
+        const k = tileStableKey(tile);
+        let out: TileRecord = { ...tile };
+        const edit = editsByUid[k];
+        if (edit) out = { ...out, ...edit };
+        if (Object.prototype.hasOwnProperty.call(pendingTitleByUid, k)) {
+          out = { ...out, Title: pendingTitleByUid[k]! };
+        }
+        if (Object.prototype.hasOwnProperty.call(pendingDescriptionByUid, k)) {
+          out = { ...out, Description: pendingDescriptionByUid[k]! };
+        }
+        if (Object.prototype.hasOwnProperty.call(pendingAgendaOutcomesByUid, k)) {
+          out = { ...out, Agenda_Outcomes: pendingAgendaOutcomesByUid[k]! };
+        }
+        if (Object.prototype.hasOwnProperty.call(pendingAttendeesByUid, k)) {
+          out = { ...out, Attendees: pendingAttendeesByUid[k]! };
+        }
+        if (Object.prototype.hasOwnProperty.call(pendingRelatedTasksByUid, k)) {
+          out = { ...out, Related_Tasks: pendingRelatedTasksByUid[k]! };
+        }
+        if (Object.prototype.hasOwnProperty.call(pendingLevelOfEffortByUid, k)) {
+          out = { ...out, Level_Of_Effort: pendingLevelOfEffortByUid[k]! };
+        }
+        return out;
+      }),
+    [
+      ganttTilesFromServer,
+      editsByUid,
+      pendingTitleByUid,
+      pendingDescriptionByUid,
+      pendingAgendaOutcomesByUid,
+      pendingAttendeesByUid,
+      pendingRelatedTasksByUid,
       pendingLevelOfEffortByUid,
     ],
   );
@@ -1765,8 +1867,12 @@ export function CanvasBoard({
   const drawerTile = useMemo(() => {
     if (!selectedTile) return null;
     const k = tileStableKey(selectedTile);
-    return tileState.find((t) => tileStableKey(t) === k) ?? selectedTile;
-  }, [selectedTile, tileState]);
+    return (
+      ganttPlanTileState.find((t) => tileStableKey(t) === k) ??
+      tileState.find((t) => tileStableKey(t) === k) ??
+      selectedTile
+    );
+  }, [selectedTile, tileState, ganttPlanTileState]);
 
   const drawerNotesValue = useMemo(() => {
     if (!drawerTile) return "";
@@ -1780,7 +1886,9 @@ export function CanvasBoard({
   const drawerContentDirty = useMemo(() => {
     if (!allowLayoutAndDrawerEdits || !drawerTile) return false;
     const k = tileStableKey(drawerTile);
-    const st = tiles.find((t) => tileStableKey(t) === k);
+    const st =
+      tiles.find((t) => tileStableKey(t) === k) ??
+      ganttTilesFromServer.find((t) => tileStableKey(t) === k);
     if (!st) return false;
     const notesVal = Object.prototype.hasOwnProperty.call(pendingNotesByUid, k)
       ? pendingNotesByUid[k]!
@@ -1789,12 +1897,11 @@ export function CanvasBoard({
     if (customerPasswordView) return false;
     if (drawerTile.Title !== st.Title) return true;
     if ((drawerTile.Description ?? "") !== (st.Description ?? "")) return true;
-    if ((drawerTile.Agenda ?? "") !== (st.Agenda ?? "")) return true;
+    if ((drawerTile.Agenda_Outcomes ?? "") !== (st.Agenda_Outcomes ?? "")) return true;
     if ((drawerTile.Attendees ?? "") !== (st.Attendees ?? "")) return true;
-    if ((drawerTile.Resources ?? "") !== (st.Resources ?? "")) return true;
-    if ((drawerTile.Desired_Outcomes ?? "") !== (st.Desired_Outcomes ?? "")) return true;
+    if ((drawerTile.Related_Tasks ?? "") !== (st.Related_Tasks ?? "")) return true;
     if (
-      drawerTile.Category === "customer_activity" &&
+      (drawerTile.Category === "customer_activity" || isEnterprisePlatinumGanttTile(drawerTile)) &&
       (drawerTile.Level_Of_Effort ?? "") !== (st.Level_Of_Effort ?? "")
     ) {
       return true;
@@ -1812,21 +1919,19 @@ export function CanvasBoard({
     customerPasswordView,
     drawerTile,
     tiles,
+    ganttTilesFromServer,
     pendingNotesByUid,
     serverNotesByUid,
     config.handsOnKeyboardSupport,
   ]);
 
-  const showDrawerDeleteButton = useMemo(
-    () =>
-      allowLayoutAndDrawerEdits &&
-      !customerPasswordView &&
-      !!drawerTile &&
-      (isAiDecisioningStudio
-        ? drawerTile.Tile_ID.startsWith("custom_")
-        : config.Product_Type === "Braze Core"),
-    [allowLayoutAndDrawerEdits, customerPasswordView, drawerTile, isAiDecisioningStudio, config.Product_Type],
-  );
+  const showDrawerDeleteButton = useMemo(() => {
+    if (!allowLayoutAndDrawerEdits || customerPasswordView || !drawerTile) return false;
+    if (isEnterprisePlatinumGanttTile(drawerTile)) {
+      return drawerTile.ganttOptional === "Y";
+    }
+    return true;
+  }, [allowLayoutAndDrawerEdits, customerPasswordView, drawerTile]);
 
   const visibleTileState = useMemo(
     () =>
@@ -1835,6 +1940,14 @@ export function CanvasBoard({
       ),
     [tileState, config.channels],
   );
+
+  /**
+   * Braze Core Gantt: Enterprise Platinum uses plan task rows; other plans use swimlane server layout.
+   */
+  const ganttVisibleTileState = useMemo(() => {
+    if (usePlatinumPlanGantt) return ganttPlanTileState;
+    return tiles.filter((tile) => isWorkstreamVisibleForChannels(tile.Workstream, config.channels));
+  }, [usePlatinumPlanGantt, ganttPlanTileState, tiles, config.channels]);
 
   /** Email-scoped rows (DNS/SSL, IT Manager) only when channel is on AND email tiles exist — matches hidden email swimlane when API omits Channel_* or seeds skipped email. */
   const hasEmailWorkstreamTiles = useMemo(
@@ -1876,8 +1989,8 @@ export function CanvasBoard({
       title: string;
       description: string;
       attendees: string;
-      resources: string;
-      desiredOutcomes: string;
+      agendaOutcomes: string;
+      relatedTasks: string;
       category: TileCategory;
     }) => {
       if (readOnly || customerPasswordView) return false;
@@ -1904,8 +2017,8 @@ export function CanvasBoard({
               Title: payload.title,
               Description: payload.description,
               Attendees: payload.attendees,
-              Resources: payload.resources,
-              Desired_Outcomes: payload.desiredOutcomes,
+              Agenda_Outcomes: payload.agendaOutcomes,
+              Related_Tasks: payload.relatedTasks,
               Category: payload.category,
               Start_Week: startWeek,
               Span_Weeks: span,
@@ -1949,28 +2062,32 @@ export function CanvasBoard({
     );
   }, [visibleTileState]);
 
+  const useDefaultBrandWorkstreamColors = usesDefaultBrazeWorkstreamBrandColors(
+    config.workstreamGradientTopColor,
+    config.workstreamGradientBottomColor,
+  );
+
+  const explicitWorkstreamLabelTypes = useMemo(() => {
+    const combined = workstreamOrderOverride ?? config.brazeCoreWorkstreamOrder;
+    return explicitWorkstreamLabelTypeMapFromSaved(combined ?? undefined);
+  }, [workstreamOrderOverride, config.brazeCoreWorkstreamOrder]);
+
   const effectiveFullOrder = useMemo(() => {
     const combined = workstreamOrderOverride ?? config.brazeCoreWorkstreamOrder;
-    const canonicalIds = normalizeBrazeCoreWorkstreamIds(
-      combined?.length ? brazeWorkstreamOrderIds(combined) : undefined,
+    return normalizeBrazeWorkstreamOrderForStorage(
+      combined ?? undefined,
+      config.workstreamGradientTopColor,
+      config.workstreamGradientBottomColor,
+      usePlatinumPlanGantt,
     );
-    const railFor = railColorResolverForWorkstreamOrder(
-      canonicalIds,
-      parseHexColorOptional(config.workstreamGradientTopColor ?? ""),
-      parseHexColorOptional(config.workstreamGradientBottomColor ?? ""),
-    );
-    return normalizeBrazeCoreWorkstreamOrder(combined ?? undefined, railFor);
   }, [
     workstreamOrderOverride,
     config.brazeCoreWorkstreamOrder,
     config.workstreamGradientTopColor,
     config.workstreamGradientBottomColor,
+    usePlatinumPlanGantt,
   ]);
 
-  const workstreamLabelTextTypeById = useMemo(
-    () => new Map(effectiveFullOrder.map((e) => [e.workstream, e.type])),
-    [effectiveFullOrder],
-  );
   const visibleWorkstreams = useMemo(() => {
     const out: (typeof WORKSTREAMS)[number][] = [];
     for (const id of brazeWorkstreamOrderIds(effectiveFullOrder)) {
@@ -1982,41 +2099,48 @@ export function CanvasBoard({
     return out;
   }, [effectiveFullOrder, config.channels, tilesByWorkstream]);
 
-  const handleWorkstreamLabelTextToggle = useCallback(
-    (ws: Workstream) => {
-      if (!allowLayoutAndDrawerEdits || isAiDecisioningStudio) return;
-      const prev =
-        workstreamOrderOverride ?? config.brazeCoreWorkstreamOrder ?? effectiveFullOrder;
-      const next = toggleWorkstreamLabelTextType(prev, ws);
-      setWorkstreamOrderOverride(next);
-      setSaveError(null);
-      void (async () => {
-        try {
-          const res = await fetch(`/api/configs/${encodeURIComponent(config.Config_ID)}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ brazeCoreWorkstreamOrder: next }),
-          });
-          if (!res.ok) {
-            const payload = (await res.json()) as { error?: string };
-            setWorkstreamOrderOverride(null);
-            setSaveError(payload.error ?? "Unable to save workstream label contrast.");
-          }
-        } catch {
-          setWorkstreamOrderOverride(null);
-          setSaveError("Network error while saving workstream label contrast.");
-        }
-      })();
-    },
-    [
-      allowLayoutAndDrawerEdits,
-      isAiDecisioningStudio,
-      workstreamOrderOverride,
-      config.brazeCoreWorkstreamOrder,
-      config.Config_ID,
-      effectiveFullOrder,
-    ],
+  const orderedPlatinumGanttLaneIds = useMemo(
+    () => platinumGanttLaneIdsFromOrder(effectiveFullOrder),
+    [effectiveFullOrder],
   );
+
+  const ganttTilesBySection = useMemo(() => {
+    const m = new Map<Workstream, TileRecord[]>();
+    for (const tile of ganttVisibleTileState) {
+      const list = m.get(tile.Workstream) ?? [];
+      list.push(tile);
+      m.set(tile.Workstream, list);
+    }
+    return m;
+  }, [ganttVisibleTileState]);
+
+  const visiblePlatinumGanttSections = useMemo(() => {
+    const out: Array<{ id: Workstream; label: string }> = [];
+    for (const id of orderedPlatinumGanttLaneIds) {
+      if ((ganttTilesBySection.get(id)?.length ?? 0) === 0) continue;
+      out.push({
+        id,
+        label: platinumGanttSectionLabelForLane(id as EnterprisePlatinumGanttLaneId),
+      });
+    }
+    return out;
+  }, [orderedPlatinumGanttLaneIds, ganttTilesBySection]);
+
+  const platinumGanttSectionColorOverrides = useMemo(() => {
+    if (!usePlatinumPlanGantt) return undefined;
+    const ids = visiblePlatinumGanttSections.map((s) => s.id);
+    if (!ids.length) return undefined;
+    return buildWorkstreamGradientColorMap(
+      ids,
+      config.workstreamGradientTopColor,
+      config.workstreamGradientBottomColor,
+    );
+  }, [
+    usePlatinumPlanGantt,
+    visiblePlatinumGanttSections,
+    config.workstreamGradientTopColor,
+    config.workstreamGradientBottomColor,
+  ]);
 
   const adsTilesByLane = useMemo(() => {
     const empty: Record<(typeof ADS_CANVAS_LANE_IDS)[number], TileRecord[]> = {
@@ -2050,20 +2174,98 @@ export function CanvasBoard({
     config.workstreamGradientBottomColor,
   ]);
 
+  const ganttChartLaneColorOverrides = useMemo(() => {
+    if (usePlatinumPlanGantt && brazeCoreView === "gantt" && platinumGanttSectionColorOverrides) {
+      return platinumGanttSectionColorOverrides;
+    }
+    return workstreamLaneColorOverrides;
+  }, [
+    usePlatinumPlanGantt,
+    brazeCoreView,
+    platinumGanttSectionColorOverrides,
+    workstreamLaneColorOverrides,
+  ]);
+
+  const handleWorkstreamLabelTextToggle = useCallback(
+    (ws: Workstream) => {
+      if (!allowLayoutAndDrawerEdits || isAiDecisioningStudio) return;
+      const prev = workstreamOrderOverride ?? effectiveFullOrder;
+      const railHex =
+        ganttChartLaneColorOverrides?.get(ws) ??
+        workstreamLaneColorOverrides?.get(ws) ??
+        WORKSTREAMS.find((w) => w.id === ws)?.color ??
+        ((ENTERPRISE_PLATINUM_GANTT_LANE_IDS as readonly Workstream[]).includes(ws)
+          ? platinumGanttLaneRailColor(ws as EnterprisePlatinumGanttLaneId)
+          : "#300266");
+      const currentType = resolveWorkstreamLabelTextType(
+        explicitWorkstreamLabelTypes,
+        ws,
+        railHex,
+        useDefaultBrandWorkstreamColors,
+      );
+      const next = toggleWorkstreamLabelTextType(prev, ws, currentType);
+      setWorkstreamOrderOverride(next);
+      setSaveError(null);
+      void (async () => {
+        try {
+          const res = await fetch(`/api/configs/${encodeURIComponent(config.Config_ID)}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ brazeCoreWorkstreamOrder: next }),
+          });
+          if (!res.ok) {
+            const payload = (await res.json()) as { error?: string };
+            setWorkstreamOrderOverride(null);
+            setSaveError(payload.error ?? "Unable to save workstream label contrast.");
+          }
+        } catch {
+          setWorkstreamOrderOverride(null);
+          setSaveError("Network error while saving workstream label contrast.");
+        }
+      })();
+    },
+    [
+      allowLayoutAndDrawerEdits,
+      isAiDecisioningStudio,
+      workstreamOrderOverride,
+      config.Config_ID,
+      effectiveFullOrder,
+      ganttChartLaneColorOverrides,
+      workstreamLaneColorOverrides,
+      explicitWorkstreamLabelTypes,
+      useDefaultBrandWorkstreamColors,
+    ],
+  );
+
   const brazeCoreGanttLaneLegend = useMemo(() => {
     if (isAiDecisioningStudio) return undefined;
+    if (usePlatinumPlanGantt) {
+      return buildEnterprisePlatinumGanttLaneLegendFromOrder(
+        visiblePlatinumGanttSections.map((s) => s.id),
+        (id) =>
+          ganttChartLaneColorOverrides?.get(id) ??
+          platinumGanttLaneRailColor(id as EnterprisePlatinumGanttLaneId),
+      );
+    }
     return visibleWorkstreams.map((ws) => ({
       id: ws.id,
       label: ws.label,
       color: workstreamLaneColorOverrides?.get(ws.id) ?? ws.color,
     }));
-  }, [isAiDecisioningStudio, visibleWorkstreams, workstreamLaneColorOverrides]);
+  }, [
+    isAiDecisioningStudio,
+    usePlatinumPlanGantt,
+    visiblePlatinumGanttSections,
+    ganttChartLaneColorOverrides,
+    visibleWorkstreams,
+    workstreamLaneColorOverrides,
+  ]);
 
   const milestoneKeySwatchHue = useMemo(
     () =>
       workstreamLaneColorOverrides?.get("campaign") ??
       WORKSTREAMS.find((w) => w.id === "campaign")?.color ??
-      "#91186E",
+      "#801ED7",
     [workstreamLaneColorOverrides],
   );
 
@@ -2091,11 +2293,83 @@ export function CanvasBoard({
     [tiles],
   );
 
-  /** Template span from last server fetch; used for Braze Core resize minimum rules until refresh. */
-  const serverTemplateSpanByUid = useMemo(
-    () => new Map(tiles.map((t) => [tileStableKey(t), t.Span_Weeks])),
-    [tiles],
+  const originalGanttLayoutByUid = useMemo(
+    () =>
+      new Map(
+        ganttTilesFromServer.map((tile) => [
+          tileStableKey(tile),
+          {
+            Start_Week: tile.Start_Week,
+            Workstream: tile.Workstream,
+            Span_Weeks: tile.Span_Weeks,
+          },
+        ]),
+      ),
+    [ganttTilesFromServer],
   );
+
+  /** Template span from last server fetch; used for Braze Core resize minimum rules until refresh. */
+  const serverTemplateSpanByUid = useMemo(() => {
+    const m = new Map(tiles.map((t) => [tileStableKey(t), t.Span_Weeks]));
+    for (const t of ganttTilesFromServer) {
+      m.set(tileStableKey(t), t.Span_Weeks);
+    }
+    return m;
+  }, [tiles, ganttTilesFromServer]);
+
+  const changedGanttTiles = useMemo(
+    () =>
+      ganttPlanTileState.filter((tile) => {
+        const original = originalGanttLayoutByUid.get(tileStableKey(tile));
+        if (!original) return false;
+        return (
+          original.Start_Week !== tile.Start_Week ||
+          original.Workstream !== tile.Workstream ||
+          original.Span_Weeks !== tile.Span_Weeks
+        );
+      }),
+    [ganttPlanTileState, originalGanttLayoutByUid],
+  );
+
+  const brazeCoreGanttSpanResize = useMemo((): BrazeCoreGanttSpanResizeProps | undefined => {
+    if (!usePlatinumPlanGantt || readOnly || customerPasswordView || brazeCoreView !== "gantt") {
+      return undefined;
+    }
+    return {
+      planOptionId: config.planOptionId,
+      durationWeeks,
+      timelineColumns,
+      spanResizeDragColumns: isPlanGanttView ? planTabWeekCount(config.planOptionId) : undefined,
+      getTimelineWidthPx: () => timelineWidthRef.current,
+      templateSpanWeeksForTile: (t: TileRecord) =>
+        serverTemplateSpanByUid.get(tileStableKey(t)) ?? t.Span_Weeks,
+      minSpanWeeksForTile: (t: TileRecord) =>
+        t.ganttMinSpanWeeks && t.ganttMinSpanWeeks > 0 ? t.ganttMinSpanWeeks : undefined,
+      onSpanChange: (t: TileRecord, span: number) => {
+        const uid = tileStableKey(t);
+        if (t.Span_Weeks === span) return;
+        setEditsByUid((c) => {
+          pushLayoutUndoSnapshot(layoutUndoStackRef, c);
+          return {
+            ...c,
+            [uid]: { ...c[uid], Span_Weeks: span },
+          };
+        });
+      },
+      spanResizeMode: "braze",
+      spanResizeHandleHeightPx: GANTT_TASK_BAR_HEIGHT_PX,
+    };
+  }, [
+    usePlatinumPlanGantt,
+    isPlanGanttView,
+    readOnly,
+    customerPasswordView,
+    brazeCoreView,
+    config.planOptionId,
+    durationWeeks,
+    timelineColumns,
+    serverTemplateSpanByUid,
+  ]);
 
   const adsGanttSpanResize = useMemo((): BrazeCoreGanttSpanResizeProps | undefined => {
     if (!isAiDecisioningStudio || readOnly || customerPasswordView) return undefined;
@@ -2121,39 +2395,6 @@ export function CanvasBoard({
       },
       spanResizeMode: "aiAdsChevron",
       spanResizeHandleHeightPx: GANTT_TASK_BAR_HEIGHT_PX,
-    };
-  }, [
-    isAiDecisioningStudio,
-    readOnly,
-    customerPasswordView,
-    config.planOptionId,
-    durationWeeks,
-    timelineColumns,
-    serverTemplateSpanByUid,
-  ]);
-
-  const brazeCoreGanttSpanResize = useMemo((): BrazeCoreGanttSpanResizeProps | undefined => {
-    if (isAiDecisioningStudio || readOnly || customerPasswordView) return undefined;
-    return {
-      planOptionId: config.planOptionId,
-      durationWeeks,
-      timelineColumns,
-      getTimelineWidthPx: () => timelineWidthRef.current,
-      templateSpanWeeksForTile: (t: TileRecord) =>
-        t.Tile_ID.startsWith("custom_")
-          ? 1
-          : (serverTemplateSpanByUid.get(tileStableKey(t)) ?? t.Span_Weeks),
-      onSpanChange: (t: TileRecord, span: number) => {
-        const uid = tileStableKey(t);
-        if (t.Span_Weeks === span) return;
-        setEditsByUid((c) => {
-          pushLayoutUndoSnapshot(layoutUndoStackRef, c);
-          return {
-            ...c,
-            [uid]: { ...c[uid], Span_Weeks: span },
-          };
-        });
-      },
     };
   }, [
     isAiDecisioningStudio,
@@ -2192,17 +2433,23 @@ export function CanvasBoard({
   const copyDirtyKeys = useMemo(() => {
     if (customerPasswordView) return new Set<string>();
     const set = new Set<string>();
-    for (const t of tiles) {
+    for (const t of allDrawerServerTiles) {
       const k = tileStableKey(t);
-      if (!isWorkstreamVisibleForChannels(t.Workstream, config.channels)) continue;
-      const eff = tileState.find((x) => tileStableKey(x) === k);
+      if (
+        !isEnterprisePlatinumGanttTile(t) &&
+        !isWorkstreamVisibleForChannels(t.Workstream, config.channels)
+      ) {
+        continue;
+      }
+      const eff = isEnterprisePlatinumGanttTile(t)
+        ? ganttPlanTileState.find((x) => tileStableKey(x) === k)
+        : tileState.find((x) => tileStableKey(x) === k);
       if (!eff) continue;
       if (eff.Title !== (serverTitleByUid.get(k) ?? "")) set.add(k);
       if ((eff.Description ?? "") !== (serverDescriptionByUid.get(k) ?? "")) set.add(k);
-      if ((eff.Agenda ?? "") !== (serverAgendaByUid.get(k) ?? "")) set.add(k);
+      if ((eff.Agenda_Outcomes ?? "") !== (serverAgendaOutcomesByUid.get(k) ?? "")) set.add(k);
       if ((eff.Attendees ?? "") !== (serverAttendeesByUid.get(k) ?? "")) set.add(k);
-      if ((eff.Resources ?? "") !== (serverResourcesByUid.get(k) ?? "")) set.add(k);
-      if ((eff.Desired_Outcomes ?? "") !== (serverDesiredOutcomesByUid.get(k) ?? "")) set.add(k);
+      if ((eff.Related_Tasks ?? "") !== (serverRelatedTasksByUid.get(k) ?? "")) set.add(k);
       if (
         eff.Category === "customer_activity" &&
         (eff.Level_Of_Effort ?? "") !== (serverLevelOfEffortByUid.get(k) ?? "")
@@ -2220,29 +2467,32 @@ export function CanvasBoard({
     return set;
   }, [
     customerPasswordView,
-    tiles,
+    allDrawerServerTiles,
     tileState,
+    ganttPlanTileState,
     config.channels,
     config.handsOnKeyboardSupport,
     serverTitleByUid,
     serverDescriptionByUid,
-    serverAgendaByUid,
+    serverAgendaOutcomesByUid,
     serverAttendeesByUid,
-    serverResourcesByUid,
-    serverDesiredOutcomesByUid,
+    serverRelatedTasksByUid,
     serverActivityLedByUid,
     serverLevelOfEffortByUid,
   ]);
 
   const savePatchKeys = useMemo(() => {
-    const positionKeys = new Set(changedTiles.map(tileStableKey));
+    const positionKeys = new Set([
+      ...changedTiles.map(tileStableKey),
+      ...changedGanttTiles.map(tileStableKey),
+    ]);
     const noteDirtyKeys = new Set(
       Object.entries(pendingNotesByUid)
         .filter(([k, v]) => v !== (serverNotesByUid.get(k) ?? ""))
         .map(([k]) => k),
     );
     return new Set([...positionKeys, ...noteDirtyKeys, ...copyDirtyKeys]);
-  }, [changedTiles, pendingNotesByUid, serverNotesByUid, copyDirtyKeys]);
+  }, [changedTiles, changedGanttTiles, pendingNotesByUid, serverNotesByUid, copyDirtyKeys]);
 
   const unsavedRef = useRef(false);
   useEffect(() => {
@@ -2292,40 +2542,112 @@ export function CanvasBoard({
     if (!allowLayoutAndDrawerEdits) return;
     const activeRaw = String(event.active.id);
     if (activeRaw.startsWith(BRAZE_WS_SORT_PREFIX)) {
-      if (customerPasswordView || isAiDecisioningStudio || brazeCoreView !== "swimlane") return;
+      if (customerPasswordView || isAiDecisioningStudio) return;
       const overRaw = event.over?.id ? String(event.over.id) : "";
       if (!overRaw.startsWith(BRAZE_WS_SORT_PREFIX)) return;
       const activeWs = activeRaw.slice(BRAZE_WS_SORT_PREFIX.length) as Workstream;
       const overWs = overRaw.slice(BRAZE_WS_SORT_PREFIX.length) as Workstream;
-      const visibleIds = visibleWorkstreams.map((w) => w.id);
-      const oldIndex = visibleIds.indexOf(activeWs);
-      const newIndex = visibleIds.indexOf(overWs);
-      if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) return;
-      const newVisibleOrder = arrayMove(visibleIds, oldIndex, newIndex);
-      const newFull = mergeFullOrderAfterVisibleReorder(effectiveFullOrder, newVisibleOrder);
-      setWorkstreamOrderOverride(newFull);
-      setSaveError(null);
-      void (async () => {
-        try {
-          const res = await fetch(`/api/configs/${encodeURIComponent(config.Config_ID)}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ brazeCoreWorkstreamOrder: newFull }),
-          });
-          if (!res.ok) {
-            const payload = (await res.json()) as { error?: string };
+
+      if (brazeCoreView === "swimlane") {
+        const visibleIds = visibleWorkstreams.map((w) => w.id);
+        const oldIndex = visibleIds.indexOf(activeWs);
+        const newIndex = visibleIds.indexOf(overWs);
+        if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) return;
+        const newVisibleOrder = arrayMove(visibleIds, oldIndex, newIndex);
+        const newFull = mergeFullOrderAfterVisibleReorder(effectiveFullOrder, newVisibleOrder);
+        setWorkstreamOrderOverride(newFull);
+        setSaveError(null);
+        void (async () => {
+          try {
+            const res = await fetch(`/api/configs/${encodeURIComponent(config.Config_ID)}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ brazeCoreWorkstreamOrder: newFull }),
+            });
+            if (!res.ok) {
+              const payload = (await res.json()) as { error?: string };
+              setWorkstreamOrderOverride(null);
+              setSaveError(payload.error ?? "Unable to save workstream order.");
+            }
+          } catch {
             setWorkstreamOrderOverride(null);
-            setSaveError(payload.error ?? "Unable to save workstream order.");
+            setSaveError("Network error while saving workstream order.");
           }
-        } catch {
-          setWorkstreamOrderOverride(null);
-          setSaveError("Network error while saving workstream order.");
-        }
-      })();
+        })();
+        return;
+      }
+
+      if (brazeCoreView === "gantt" && usePlatinumPlanGantt) {
+        const visibleIds = visiblePlatinumGanttSections.map((s) => s.id);
+        const oldIndex = visibleIds.indexOf(activeWs);
+        const newIndex = visibleIds.indexOf(overWs);
+        if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) return;
+        const newVisibleOrder = arrayMove(visibleIds, oldIndex, newIndex);
+        const newFull = mergeFullOrderAfterVisibleReorder(effectiveFullOrder, newVisibleOrder);
+        setWorkstreamOrderOverride(newFull);
+        setSaveError(null);
+        void (async () => {
+          try {
+            const res = await fetch(`/api/configs/${encodeURIComponent(config.Config_ID)}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ brazeCoreWorkstreamOrder: newFull }),
+            });
+            if (!res.ok) {
+              const payload = (await res.json()) as { error?: string };
+              setWorkstreamOrderOverride(null);
+              setSaveError(payload.error ?? "Unable to save section order.");
+            }
+          } catch {
+            setWorkstreamOrderOverride(null);
+            setSaveError("Network error while saving section order.");
+          }
+        })();
+        return;
+      }
+
       return;
     }
 
     const activeUid = String(event.active.id);
+
+    if (!isAiDecisioningStudio && brazeCoreView === "gantt") {
+      if (!usePlatinumPlanGantt) return;
+
+      const activeTile = ganttPlanTileState.find((tile) => tileStableKey(tile) === activeUid);
+      if (!activeTile) return;
+      if (!platinumGanttTaskLayoutEditable(
+        weekMarksForPlatinumGanttTile(activeTile.Tile_ID, config.planOptionId),
+      )) {
+        return;
+      }
+
+      const u = getTileTimelineUnits(config.planOptionId, activeTile, durationWeeks);
+      const spanUnits = u.endUnit - u.startUnit + 1;
+      const maxStartUnit = Math.max(1, timelineColumns - spanUnits + 1);
+      const columnWidthPx = Math.max(1, timelineWidthRef.current / timelineColumns);
+      const leftEdgePx = (u.startUnit - 1) * columnWidthPx + event.delta.x;
+      const snappedStartUnit = Math.floor(leftEdgePx / columnWidthPx) + 1;
+      const nextStartWeek =
+        usePlatinumPlanGantt && isEnterprisePlatinumGanttTile(activeTile)
+          ? timelineColumnToPlanWeek(config.planOptionId, snappedStartUnit)
+          : Math.min(maxStartUnit, Math.max(1, snappedStartUnit));
+
+      if (activeTile.Start_Week === nextStartWeek) return;
+
+      setEditsByUid((current) => {
+        pushLayoutUndoSnapshot(layoutUndoStackRef, current);
+        return {
+          ...current,
+          [activeUid]: {
+            ...current[activeUid],
+            Start_Week: nextStartWeek,
+          },
+        };
+      });
+      return;
+    }
+
     const overId = event.over?.id ? String(event.over.id) : null;
 
     const activeTile = tileState.find((tile) => tileStableKey(tile) === activeUid);
@@ -2411,14 +2733,13 @@ export function CanvasBoard({
     [allowLayoutAndDrawerEdits, selectedTile, tiles],
   );
 
-  const handleDrawerAgendaCommit = useCallback(
+  const handleDrawerAgendaOutcomesCommit = useCallback(
     (value: string) => {
       if (!allowLayoutAndDrawerEdits || readOnly || customerPasswordView || !selectedTile) return;
       const k = tileStableKey(selectedTile);
-      const lib = getTileLibraryEntry(selectedTile.Tile_ID).agenda;
-      const serverA = tiles.find((t) => tileStableKey(t) === k)?.Agenda ?? "";
-      const canonical = committedBulletTextMatchesLibrary(value, lib) ? "" : value;
-      setPendingAgendaByUid((prev) => {
+      const serverA = tiles.find((t) => tileStableKey(t) === k)?.Agenda_Outcomes ?? "";
+      const canonical = value.trim();
+      setPendingAgendaOutcomesByUid((prev) => {
         if (canonical === serverA) {
           if (!Object.prototype.hasOwnProperty.call(prev, k)) return prev;
           const next = { ...prev };
@@ -2435,9 +2756,8 @@ export function CanvasBoard({
     (value: string) => {
       if (!allowLayoutAndDrawerEdits || readOnly || customerPasswordView || !selectedTile) return;
       const k = tileStableKey(selectedTile);
-      const lib = getTileLibraryEntry(selectedTile.Tile_ID).suggested_attendees;
       const serverA = tiles.find((t) => tileStableKey(t) === k)?.Attendees ?? "";
-      const canonical = committedBulletTextMatchesLibrary(value, lib) ? "" : value;
+      const canonical = value.trim();
       setPendingAttendeesByUid((prev) => {
         if (canonical === serverA) {
           if (!Object.prototype.hasOwnProperty.call(prev, k)) return prev;
@@ -2451,35 +2771,14 @@ export function CanvasBoard({
     [readOnly, customerPasswordView, selectedTile, tiles, allowLayoutAndDrawerEdits],
   );
 
-  const handleDrawerResourcesCommit = useCallback(
+  const handleDrawerRelatedTasksCommit = useCallback(
     (value: string) => {
       if (!allowLayoutAndDrawerEdits || readOnly || customerPasswordView || !selectedTile) return;
       const k = tileStableKey(selectedTile);
-      const lib = getTileLibraryEntry(selectedTile.Tile_ID).resources;
-      const serverR = tiles.find((t) => tileStableKey(t) === k)?.Resources ?? "";
-      const canonical = committedResourcesTextMatchesLibrary(value, lib) ? "" : value;
-      setPendingResourcesByUid((prev) => {
+      const serverR = tiles.find((t) => tileStableKey(t) === k)?.Related_Tasks ?? "";
+      const canonical = value.trim();
+      setPendingRelatedTasksByUid((prev) => {
         if (canonical === serverR) {
-          if (!Object.prototype.hasOwnProperty.call(prev, k)) return prev;
-          const next = { ...prev };
-          delete next[k];
-          return next;
-        }
-        return { ...prev, [k]: canonical };
-      });
-    },
-    [readOnly, customerPasswordView, selectedTile, tiles, allowLayoutAndDrawerEdits],
-  );
-
-  const handleDrawerDesiredOutcomesCommit = useCallback(
-    (value: string) => {
-      if (!allowLayoutAndDrawerEdits || readOnly || customerPasswordView || !selectedTile) return;
-      const k = tileStableKey(selectedTile);
-      const lib = getTileLibraryEntry(selectedTile.Tile_ID).desired_outcomes;
-      const serverO = tiles.find((t) => tileStableKey(t) === k)?.Desired_Outcomes ?? "";
-      const canonical = committedBulletTextMatchesLibrary(value, lib) ? "" : value;
-      setPendingDesiredOutcomesByUid((prev) => {
-        if (canonical === serverO) {
           if (!Object.prototype.hasOwnProperty.call(prev, k)) return prev;
           const next = { ...prev };
           delete next[k];
@@ -2584,12 +2883,13 @@ export function CanvasBoard({
     /** Drawer tile already merges pending title/description/agenda/attendees/resources/outcomes from layout state. */
     const title = drawerTile.Title;
     const description = drawerTile.Description ?? "";
-    const agenda = drawerTile.Agenda ?? "";
+    const agendaOutcomes = drawerTile.Agenda_Outcomes ?? "";
     const attendees = drawerTile.Attendees ?? "";
-    const resources = drawerTile.Resources ?? "";
-    const desiredOutcomes = drawerTile.Desired_Outcomes ?? "";
+    const relatedTasks = drawerTile.Related_Tasks ?? "";
     const levelOfEffort =
-      drawerTile.Category === "customer_activity" ? (drawerTile.Level_Of_Effort ?? "") : undefined;
+      drawerTile.Category === "customer_activity" || isEnterprisePlatinumGanttTile(drawerTile)
+        ? (drawerTile.Level_Of_Effort ?? "")
+        : undefined;
     const activityLed =
       drawerTile.Category === "customer_activity" && config.handsOnKeyboardSupport
         ? parseCustomerActivityLed(drawerTile.activityLed)
@@ -2598,27 +2898,40 @@ export function CanvasBoard({
     setNotesOkayPending(true);
     setSaveError(null);
     try {
-      const response = await fetch("/api/tiles", {
+      const isGanttTask = isEnterprisePlatinumGanttTile(drawerTile);
+      const response = await fetch(isGanttTask ? "/api/gantt-tasks" : "/api/tiles", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           configId: config.Config_ID,
           updates: [
-            {
-              Tile_ID: drawerTile.Tile_ID,
-              Start_Week: drawerTile.Start_Week,
-              Workstream: drawerTile.Workstream,
-              Span_Weeks: drawerTile.Span_Weeks,
-              Notes: notes,
-              Title: title,
-              Description: description,
-              Agenda: agenda,
-              Attendees: attendees,
-              Resources: resources,
-              Desired_Outcomes: desiredOutcomes,
-              ...(levelOfEffort !== undefined ? { Level_Of_Effort: levelOfEffort } : {}),
-              ...(activityLed !== undefined ? { activityLed } : {}),
-            },
+            isGanttTask
+              ? {
+                  Tile_ID: drawerTile.Tile_ID,
+                  Start_Week: drawerTile.Start_Week,
+                  Span_Weeks: drawerTile.Span_Weeks,
+                  Notes: notes,
+                  Title: title,
+                  Description: description,
+                  Agenda_Outcomes: agendaOutcomes,
+                  Attendees: attendees,
+                  Related_Tasks: relatedTasks,
+                  Level_Of_Effort: levelOfEffort ?? "",
+                }
+              : {
+                  Tile_ID: drawerTile.Tile_ID,
+                  Start_Week: drawerTile.Start_Week,
+                  Workstream: drawerTile.Workstream,
+                  Span_Weeks: drawerTile.Span_Weeks,
+                  Notes: notes,
+                  Title: title,
+                  Description: description,
+                  Agenda_Outcomes: agendaOutcomes,
+                  Attendees: attendees,
+                  Related_Tasks: relatedTasks,
+                  ...(levelOfEffort !== undefined ? { Level_Of_Effort: levelOfEffort } : {}),
+                  ...(activityLed !== undefined ? { activityLed } : {}),
+                },
           ],
         }),
       });
@@ -2638,7 +2951,7 @@ export function CanvasBoard({
           delete next[k];
           return next;
         });
-        setPendingAgendaByUid((prev) => {
+        setPendingAgendaOutcomesByUid((prev) => {
           const next = { ...prev };
           delete next[k];
           return next;
@@ -2648,12 +2961,7 @@ export function CanvasBoard({
           delete next[k];
           return next;
         });
-        setPendingResourcesByUid((prev) => {
-          const next = { ...prev };
-          delete next[k];
-          return next;
-        });
-        setPendingDesiredOutcomesByUid((prev) => {
+        setPendingRelatedTasksByUid((prev) => {
           const next = { ...prev };
           delete next[k];
           return next;
@@ -2694,8 +3002,12 @@ export function CanvasBoard({
       setDeleteTilePending(true);
       setSaveError(null);
       try {
+        const isGanttTask = isEnterprisePlatinumGanttTile(target);
         const qs = new URLSearchParams({ configId: config.Config_ID, id: rowId });
-        const response = await fetch(`/api/tiles?${qs.toString()}`, { method: "DELETE" });
+        const response = await fetch(
+          isGanttTask ? `/api/gantt-tasks?${qs.toString()}` : `/api/tiles?${qs.toString()}`,
+          { method: "DELETE" },
+        );
         if (response.ok) {
           const k = tileStableKey(target);
           setPendingNotesByUid((prev) => {
@@ -2713,7 +3025,7 @@ export function CanvasBoard({
             delete next[k];
             return next;
           });
-          setPendingAgendaByUid((prev) => {
+          setPendingAgendaOutcomesByUid((prev) => {
             const next = { ...prev };
             delete next[k];
             return next;
@@ -2723,12 +3035,7 @@ export function CanvasBoard({
             delete next[k];
             return next;
           });
-          setPendingResourcesByUid((prev) => {
-            const next = { ...prev };
-            delete next[k];
-            return next;
-          });
-          setPendingDesiredOutcomesByUid((prev) => {
+          setPendingRelatedTasksByUid((prev) => {
             const next = { ...prev };
             delete next[k];
             return next;
@@ -2790,14 +3097,51 @@ export function CanvasBoard({
       Notes: string;
       Title: string;
       Description: string;
-      Agenda: string;
+      Agenda_Outcomes: string;
       Attendees: string;
-      Resources: string;
-      Desired_Outcomes: string;
+      Related_Tasks: string;
       activityLed?: CustomerActivityLed;
       Level_Of_Effort?: string;
     }> = [];
+    const ganttUpdates: Array<{
+      Tile_ID: string;
+      Start_Week: number;
+      Span_Weeks?: number;
+      Notes: string;
+      Title: string;
+      Description: string;
+      Agenda_Outcomes: string;
+      Attendees: string;
+      Related_Tasks: string;
+      Level_Of_Effort?: string;
+    }> = [];
     for (const key of savePatchKeys) {
+      const ganttTile = ganttPlanTileState.find((t) => tileStableKey(t) === key);
+      if (ganttTile) {
+        ganttUpdates.push({
+          Tile_ID: ganttTile.Tile_ID,
+          Start_Week: ganttTile.Start_Week,
+          Span_Weeks: ganttTile.Span_Weeks,
+          Notes: Object.prototype.hasOwnProperty.call(pendingNotesByUid, key)
+            ? pendingNotesByUid[key]!
+            : (ganttTile.Notes ?? ""),
+          Title: ganttTile.Title,
+          Description: ganttTile.Description ?? "",
+          Agenda_Outcomes: Object.prototype.hasOwnProperty.call(pendingAgendaOutcomesByUid, key)
+            ? pendingAgendaOutcomesByUid[key]!
+            : (ganttTile.Agenda_Outcomes ?? ""),
+          Attendees: Object.prototype.hasOwnProperty.call(pendingAttendeesByUid, key)
+            ? pendingAttendeesByUid[key]!
+            : (ganttTile.Attendees ?? ""),
+          Related_Tasks: Object.prototype.hasOwnProperty.call(pendingRelatedTasksByUid, key)
+            ? pendingRelatedTasksByUid[key]!
+            : (ganttTile.Related_Tasks ?? ""),
+          Level_Of_Effort: Object.prototype.hasOwnProperty.call(pendingLevelOfEffortByUid, key)
+            ? pendingLevelOfEffortByUid[key]!
+            : (ganttTile.Level_Of_Effort ?? ""),
+        });
+        continue;
+      }
       const tile = tileState.find((t) => tileStableKey(t) === key);
       if (!tile) continue;
       if (!isWorkstreamVisibleForChannels(tile.Workstream, config.channels)) continue;
@@ -2811,18 +3155,15 @@ export function CanvasBoard({
           : (tile.Notes ?? ""),
         Title: tile.Title,
         Description: tile.Description ?? "",
-        Agenda: Object.prototype.hasOwnProperty.call(pendingAgendaByUid, key)
-          ? pendingAgendaByUid[key]!
-          : (tile.Agenda ?? ""),
+        Agenda_Outcomes: Object.prototype.hasOwnProperty.call(pendingAgendaOutcomesByUid, key)
+          ? pendingAgendaOutcomesByUid[key]!
+          : (tile.Agenda_Outcomes ?? ""),
         Attendees: Object.prototype.hasOwnProperty.call(pendingAttendeesByUid, key)
           ? pendingAttendeesByUid[key]!
           : (tile.Attendees ?? ""),
-        Resources: Object.prototype.hasOwnProperty.call(pendingResourcesByUid, key)
-          ? pendingResourcesByUid[key]!
-          : (tile.Resources ?? ""),
-        Desired_Outcomes: Object.prototype.hasOwnProperty.call(pendingDesiredOutcomesByUid, key)
-          ? pendingDesiredOutcomesByUid[key]!
-          : (tile.Desired_Outcomes ?? ""),
+        Related_Tasks: Object.prototype.hasOwnProperty.call(pendingRelatedTasksByUid, key)
+          ? pendingRelatedTasksByUid[key]!
+          : (tile.Related_Tasks ?? ""),
         ...(tile.Category === "customer_activity"
           ? {
               Level_Of_Effort: Object.prototype.hasOwnProperty.call(pendingLevelOfEffortByUid, key)
@@ -2839,22 +3180,39 @@ export function CanvasBoard({
           : {}),
       });
     }
-    if (!updates.length) return true;
+    if (!updates.length && !ganttUpdates.length) return true;
 
     setSaving(true);
     setSaveError(null);
 
-    const response = await fetch("/api/tiles", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        configId: config.Config_ID,
-        updates,
-      }),
-    });
+    const tileResponse =
+      updates.length > 0
+        ? await fetch("/api/tiles", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              configId: config.Config_ID,
+              updates,
+            }),
+          })
+        : null;
+
+    const ganttResponse =
+      ganttUpdates.length > 0
+        ? await fetch("/api/gantt-tasks", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              configId: config.Config_ID,
+              updates: ganttUpdates,
+            }),
+          })
+        : null;
 
     setSaving(false);
-    if (response.ok) {
+    const responseOk =
+      (!tileResponse || tileResponse.ok) && (!ganttResponse || ganttResponse.ok);
+    if (responseOk) {
       layoutUndoStackRef.current = [];
       setPendingNotesByUid((prev) => {
         const next = { ...prev };
@@ -2877,7 +3235,7 @@ export function CanvasBoard({
         }
         return next;
       });
-      setPendingAgendaByUid((prev) => {
+      setPendingAgendaOutcomesByUid((prev) => {
         const next = { ...prev };
         for (const key of savePatchKeys) {
           delete next[key];
@@ -2891,14 +3249,7 @@ export function CanvasBoard({
         }
         return next;
       });
-      setPendingResourcesByUid((prev) => {
-        const next = { ...prev };
-        for (const key of savePatchKeys) {
-          delete next[key];
-        }
-        return next;
-      });
-      setPendingDesiredOutcomesByUid((prev) => {
+      setPendingRelatedTasksByUid((prev) => {
         const next = { ...prev };
         for (const key of savePatchKeys) {
           delete next[key];
@@ -2922,8 +3273,17 @@ export function CanvasBoard({
       router.refresh();
       return true;
     }
-    const payload = (await response.json()) as { error?: string };
-    setSaveError(payload.error ?? "Unable to save layout.");
+    const tilePayload =
+      tileResponse && !tileResponse.ok
+        ? ((await tileResponse.json()) as { error?: string })
+        : null;
+    const ganttPayload =
+      ganttResponse && !ganttResponse.ok
+        ? ((await ganttResponse.json()) as { error?: string })
+        : null;
+    setSaveError(
+      tilePayload?.error ?? ganttPayload?.error ?? "Unable to save layout.",
+    );
     return false;
   }
 
@@ -2953,6 +3313,13 @@ export function CanvasBoard({
     }),
     [config.onboardingSessionTileColor, config.customerActivityTileColor],
   );
+
+  const brazePlatinumGanttSectionSortEnabled =
+    allowLayoutAndDrawerEdits &&
+    !customerPasswordView &&
+    !isAiDecisioningStudio &&
+    usePlatinumPlanGantt &&
+    brazeCoreView === "gantt";
 
   const brazeCoreSwimlaneSortEnabled =
     allowLayoutAndDrawerEdits &&
@@ -3002,9 +3369,12 @@ export function CanvasBoard({
     const rowMinFloor = laneCount <= 1 ? scaleYpx(52) : scaleYpx(92);
     const rowHeight = Math.max(rowMinFloor, contentRowHeight);
     const rowRailBg = workstreamLaneColorOverrides?.get(workstream.id) ?? workstream.color;
-    const workstreamLabelType =
-      workstreamLabelTextTypeById.get(workstream.id) ??
-      workstreamLabelTextTypeFromRailHex(rowRailBg);
+    const workstreamLabelType = resolveWorkstreamLabelTextType(
+      explicitWorkstreamLabelTypes,
+      workstream.id,
+      rowRailBg,
+      useDefaultBrandWorkstreamColors,
+    );
     const swimlaneLabelColor = labelHexForWorkstreamTextType(workstreamLabelType);
 
     return (
@@ -3802,7 +4172,7 @@ export function CanvasBoard({
           </div>
         </div>
       )}
-      <div className="rounded-xl border border-[#C9C4EF] bg-white shadow-sm">
+      <div className="h-fit rounded-xl border border-[#C9C4EF] bg-white shadow-sm">
         <div className="w-full">
           {isAiDecisioningStudio ? (
             adsCanvasView === "gantt" ? (
@@ -3814,7 +4184,7 @@ export function CanvasBoard({
                     planOptionId={config.planOptionId}
                     durationWeeks={durationWeeks}
                     timelineColumns={timelineColumns}
-                    timelineConfig={timelineConfig}
+                    timelineConfig={activeTimelineConfig}
                     showMonthsRow={showMonthsRow}
                     showWeeksRow={showWeeksRow}
                     phaseGridSpans={phaseGridSpans}
@@ -3843,7 +4213,7 @@ export function CanvasBoard({
                       planOptionId={config.planOptionId}
                       durationWeeks={durationWeeks}
                       timelineColumns={timelineColumns}
-                      timelineConfig={timelineConfig}
+                      timelineConfig={activeTimelineConfig}
                       showMonthsRow={showMonthsRow}
                       showWeeksRow={showWeeksRow}
                       phaseGridSpans={phaseGridSpans}
@@ -3881,52 +4251,18 @@ export function CanvasBoard({
             )
           ) : brazeCoreView === "gantt" ? (
             <div className="px-2 py-4 sm:px-4">
-              {renderReadOnly ? (
-                <BrazeCoreGanttChart
-                  tiles={visibleTileState}
-                  showOnboardingSessions={false}
-                  planOptionId={config.planOptionId}
-                  durationWeeks={durationWeeks}
-                  timelineColumns={timelineColumns}
-                  timelineConfig={timelineConfig}
-                  showMonthsRow={showMonthsRow}
-                  showWeeksRow={showWeeksRow}
-                  phaseGridSpans={phaseGridSpans}
-                  monthGridSpans={monthGridSpans}
-                  {...brazeTimelineDateChartProps}
-                  onOpenTile={setSelectedTile}
-                  readOnly
-                  timelineRailRef={timelineRef}
-                  laneLegend={brazeCoreGanttLaneLegend}
-                  legendProspectLabel={chartProspectLegendName}
-                  handsOnKeyboardSupport={Boolean(config.handsOnKeyboardSupport)}
-                  legendPartnerLabel={config.partnerName}
-                  aiDecisioningCategoryColors={aiGanttCategoryColorsProp}
-                  workstreamLaneColorOverrides={workstreamLaneColorOverrides}
-                  workstreamLabelTextTypeById={workstreamLabelTextTypeById}
-                  onWorkstreamLabelTextDoubleClick={
-                    allowLayoutAndDrawerEdits && !isAiDecisioningStudio && !renderReadOnly
-                      ? handleWorkstreamLabelTextToggle
-                      : undefined
-                  }
-                  timelineAnnotation={timelineAnnotationDoc}
-                  onTimelineAnnotationChange={
-                    timelineAnnotationsEditable ? handleTimelineAnnotationChange : undefined
-                  }
-                  onAppendTimelineAnnotationAtColumn={
-                    timelineAnnotationsEditable ? handleAppendTimelineAnnotationAtColumn : undefined
-                  }
-                  onAfterAnnotationTitleCommit={timelineAnnotationTitleCommitFlush}
-                />
-              ) : (
+              {usePlatinumPlanGantt &&
+              allowLayoutAndDrawerEdits &&
+              !readOnly &&
+              !customerPasswordView ? (
                 <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
                   <BrazeCoreGanttChart
-                    tiles={visibleTileState}
+                    tiles={ganttVisibleTileState}
                     showOnboardingSessions={false}
                     planOptionId={config.planOptionId}
                     durationWeeks={durationWeeks}
                     timelineColumns={timelineColumns}
-                    timelineConfig={timelineConfig}
+                    timelineConfig={activeTimelineConfig}
                     showMonthsRow={showMonthsRow}
                     showWeeksRow={showWeeksRow}
                     phaseGridSpans={phaseGridSpans}
@@ -3934,15 +4270,18 @@ export function CanvasBoard({
                     {...brazeTimelineDateChartProps}
                     onOpenTile={setSelectedTile}
                     readOnly={false}
-                    timelineRailRef={timelineRef}
                     spanResize={brazeCoreGanttSpanResize}
+                    enterprisePlanTaskGantt={usePlatinumPlanGantt}
+                    laneLegendTitle={usePlatinumPlanGantt ? "Sections" : "Workstreams"}
+                    timelineRailRef={timelineRef}
                     laneLegend={brazeCoreGanttLaneLegend}
                     legendProspectLabel={chartProspectLegendName}
                     handsOnKeyboardSupport={Boolean(config.handsOnKeyboardSupport)}
                     legendPartnerLabel={config.partnerName}
                     aiDecisioningCategoryColors={aiGanttCategoryColorsProp}
-                    workstreamLaneColorOverrides={workstreamLaneColorOverrides}
-                    workstreamLabelTextTypeById={workstreamLabelTextTypeById}
+                    workstreamLaneColorOverrides={ganttChartLaneColorOverrides}
+                    sectionSortEnabled={brazePlatinumGanttSectionSortEnabled}
+                    explicitWorkstreamLabelTypes={explicitWorkstreamLabelTypes}
                     onWorkstreamLabelTextDoubleClick={
                       allowLayoutAndDrawerEdits && !isAiDecisioningStudio && !renderReadOnly
                         ? handleWorkstreamLabelTextToggle
@@ -3956,8 +4295,50 @@ export function CanvasBoard({
                       timelineAnnotationsEditable ? handleAppendTimelineAnnotationAtColumn : undefined
                     }
                     onAfterAnnotationTitleCommit={timelineAnnotationTitleCommitFlush}
+                    useDefaultBrandWorkstreamColors={useDefaultBrandWorkstreamColors}
                   />
                 </DndContext>
+              ) : (
+              <BrazeCoreGanttChart
+                tiles={ganttVisibleTileState}
+                showOnboardingSessions={false}
+                planOptionId={config.planOptionId}
+                durationWeeks={durationWeeks}
+                timelineColumns={timelineColumns}
+                timelineConfig={activeTimelineConfig}
+                showMonthsRow={showMonthsRow}
+                showWeeksRow={showWeeksRow}
+                phaseGridSpans={phaseGridSpans}
+                monthGridSpans={monthGridSpans}
+                {...brazeTimelineDateChartProps}
+                onOpenTile={setSelectedTile}
+                readOnly={!usePlatinumPlanGantt || readOnly || customerPasswordView}
+                spanResize={brazeCoreGanttSpanResize}
+                enterprisePlanTaskGantt={usePlatinumPlanGantt}
+                laneLegendTitle={usePlatinumPlanGantt ? "Sections" : "Workstreams"}
+                timelineRailRef={timelineRef}
+                laneLegend={brazeCoreGanttLaneLegend}
+                legendProspectLabel={chartProspectLegendName}
+                handsOnKeyboardSupport={Boolean(config.handsOnKeyboardSupport)}
+                legendPartnerLabel={config.partnerName}
+                aiDecisioningCategoryColors={aiGanttCategoryColorsProp}
+                workstreamLaneColorOverrides={ganttChartLaneColorOverrides}
+                explicitWorkstreamLabelTypes={explicitWorkstreamLabelTypes}
+                onWorkstreamLabelTextDoubleClick={
+                  allowLayoutAndDrawerEdits && !isAiDecisioningStudio && !renderReadOnly
+                    ? handleWorkstreamLabelTextToggle
+                    : undefined
+                }
+                timelineAnnotation={timelineAnnotationDoc}
+                onTimelineAnnotationChange={
+                  timelineAnnotationsEditable ? handleTimelineAnnotationChange : undefined
+                }
+                onAppendTimelineAnnotationAtColumn={
+                  timelineAnnotationsEditable ? handleAppendTimelineAnnotationAtColumn : undefined
+                }
+                onAfterAnnotationTitleCommit={timelineAnnotationTitleCommitFlush}
+                useDefaultBrandWorkstreamColors={useDefaultBrandWorkstreamColors}
+              />
               )}
             </div>
           ) : (
@@ -4485,10 +4866,9 @@ export function CanvasBoard({
         drawerContentDirty={drawerContentDirty}
         onDrawerTitleCommit={handleDrawerTitleCommit}
         onDrawerDescriptionCommit={handleDrawerDescriptionCommit}
-        onDrawerAgendaCommit={handleDrawerAgendaCommit}
+        onDrawerAgendaOutcomesCommit={handleDrawerAgendaOutcomesCommit}
         onDrawerAttendeesCommit={handleDrawerAttendeesCommit}
-        onDrawerResourcesCommit={handleDrawerResourcesCommit}
-        onDrawerDesiredOutcomesCommit={handleDrawerDesiredOutcomesCommit}
+        onDrawerRelatedTasksCommit={handleDrawerRelatedTasksCommit}
         onDrawerLevelOfEffortCommit={handleDrawerLevelOfEffortCommit}
         onDrawerActivityLedCommit={handleDrawerActivityLedCommit}
         showDeleteTile={showDrawerDeleteButton}

@@ -17,6 +17,18 @@ export type Workstream =
   | "whatsapp"
   | "campaign"
   | "enablement"
+  /** Enterprise Platinum Gantt task-list section lanes (not used on swimlane). */
+  | "gantt_admin"
+  | "gantt_data"
+  | "gantt_tech"
+  | "gantt_audiences"
+  | "gantt_channels"
+  | "gantt_email"
+  | "gantt_sms"
+  | "gantt_whatsapp"
+  | "gantt_web_mobile"
+  | "gantt_messaging"
+  | "gantt_analytics"
   /** AI Decisioning Studio canvas lanes (no swimlane labels; use JSON `Workstream`: `one`, `two`, …). */
   | "one"
   | "two"
@@ -29,6 +41,8 @@ export type WorkstreamLabelTextType = "b" | "w";
 export type BrazeWorkstreamOrderEntry = {
   workstream: Workstream;
   type: WorkstreamLabelTextType;
+  /** Set when the user double-clicked a rail label to override auto contrast (persisted in Mongo). */
+  labelContrastUserSet?: boolean;
 };
 
 export type ProductType = "Braze Core" | "AI Decisioning Studio";
@@ -51,6 +65,7 @@ export type PlanOptionId =
   | "ignite_silver"
   | "ignite_gold"
   | "12_week"
+  | "enterprise_gold"
   | "ai_decisioning_studio";
 
 /** Messaging/channel scope for the onboarding plan (stored on config row). */
@@ -134,14 +149,12 @@ export type TileRecord = {
   Notes?: string;
   /** Tiles sheet **Description** column; when empty, UI may fall back to tile library copy. */
   Description?: string;
-  /** Tiles sheet **Attendees** (multiline / bullets). When empty, drawer uses tile library suggested attendees. */
+  /** Tiles sheet **Suggested Attendees** (multiline / bullets). */
   Attendees?: string;
-  /** Tiles sheet **Agenda** (multiline / bullets). When empty, drawer uses tile library agenda. */
-  Agenda?: string;
-  /** Tiles sheet **Resources** (multiline). When empty, drawer uses tile library resource links. */
-  Resources?: string;
-  /** Tiles sheet **Desired_Outcomes** (multiline / bullets). When empty, drawer uses library outcomes. */
-  Desired_Outcomes?: string;
+  /** Meetings tab **Agenda & Outcomes** (multiline / bullets). */
+  Agenda_Outcomes?: string;
+  /** Meetings tab **Related Tasks** (multiline / bullets). */
+  Related_Tasks?: string;
   /**
    * Customer activity tiles when Hands On Keyboard Support is enabled.
    * Mongo **Activity_Led** (`customer` default, `partner` when partner-led).
@@ -150,6 +163,32 @@ export type TileRecord = {
   /** Customer activity tiles: effort estimate (Mongo **Level_Of_Effort**). */
   Level_Of_Effort?: string;
   /** Tiles sheet **ID** column (`{Config_ID}__{Tile_ID slug}`) for PATCH/DELETE/`?id=`. */
+  CaboodlePatchKey?: string;
+  /** Enterprise Platinum Gantt (`ept_*` tiles): minimum bar span in timeline columns. */
+  ganttMinSpanWeeks?: number;
+  /** Enterprise Platinum Gantt: `Y` = user may delete the row. */
+  ganttOptional?: "Y" | "N" | "";
+};
+
+/** Mongo `gantt_tasks` collection — Enterprise Platinum plan task rows (separate from swimlane tiles). */
+export type GanttTaskRecord = {
+  Config_ID: string;
+  Task_Key: string;
+  Tile_ID: string;
+  Section: string;
+  Workstream: Workstream;
+  Title: string;
+  Optional: "Y" | "N";
+  Start_Week: number;
+  Span_Weeks: number;
+  Min_Span_Weeks: number;
+  Stack_Order: number;
+  Description?: string;
+  Attendees?: string;
+  Agenda_Outcomes?: string;
+  Related_Tasks?: string;
+  Level_Of_Effort?: string;
+  Notes?: string;
   CaboodlePatchKey?: string;
 };
 

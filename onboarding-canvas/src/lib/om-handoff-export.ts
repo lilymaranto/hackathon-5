@@ -32,6 +32,7 @@ export function approximateTimelineLabel(
   }
   if (
     planId === "12_week" ||
+    planId === "enterprise_gold" ||
     planId === "ignite_silver" ||
     planId === "quickstart_gold" ||
     planId === "quickstart_silver"
@@ -94,15 +95,15 @@ export function buildOmExportSections(config: ConfigRecord, tile: TileRecord): O
       sections.push({ kind: "body", text: "Suggested attendees / stakeholders:" });
       sections.push({ kind: "body", text: (tile.Attendees ?? "").trim() });
     }
-    if (hasText(tile.Resources)) {
+    if (hasText(tile.Agenda_Outcomes)) {
       sections.push({ kind: "body", text: "" });
-      sections.push({ kind: "body", text: "Resources:" });
-      sections.push({ kind: "body", text: (tile.Resources ?? "").trim() });
+      sections.push({ kind: "body", text: "Agenda & outcomes:" });
+      sections.push({ kind: "body", text: (tile.Agenda_Outcomes ?? "").trim() });
     }
-    if (hasText(tile.Desired_Outcomes)) {
+    if (hasText(tile.Related_Tasks)) {
       sections.push({ kind: "body", text: "" });
-      sections.push({ kind: "body", text: "Desired outcomes:" });
-      sections.push({ kind: "body", text: (tile.Desired_Outcomes ?? "").trim() });
+      sections.push({ kind: "body", text: "Related tasks:" });
+      sections.push({ kind: "body", text: (tile.Related_Tasks ?? "").trim() });
     }
     return sections;
   }

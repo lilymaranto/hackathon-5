@@ -12,9 +12,9 @@ import { parseHexColorOptional } from "@/lib/tile-category-colors";
 import {
   BRAZE_CORE_WORKSTREAM_IDS,
   brazeWorkstreamOrderIds,
-  normalizeBrazeCoreWorkstreamOrder,
+  normalizeBrazeWorkstreamOrderForStorage,
   parseBrazeCoreWorkstreamOrderJson,
-  railColorResolverForWorkstreamOrder,
+  serializeBrazeWorkstreamOrderForMongo,
 } from "@/lib/braze-workstream-order";
 import { isHttpLogoUrl, normalizeLogoHttpUrl } from "@/lib/config-logo";
 import { parseTimelineDatesField, serializeTimelineDates } from "@/lib/timeline-dates";
@@ -26,6 +26,7 @@ import {
   ProductType,
   TileRecord,
   Workstream,
+  BrazeWorkstreamOrderEntry,
 } from "@/lib/types";
 import {
   EMPTY_TIMELINE_ANNOTATION_DOC,
@@ -33,6 +34,9 @@ import {
   serializeTimelineAnnotationDocument,
 } from "@/lib/timeline-annotations";
 import { getMongoCollections } from "@/lib/mongodb";
+import { defaultDrawerFieldsFromMeetingsSheet } from "@/lib/meetings-sheet-data";
+import { usesPlanTaskGantt } from "@/lib/enterprise-platinum-gantt";
+import { seedGanttTasksForConfig } from "@/lib/mongo-gantt-tasks";
 
 function toNumber(value: unknown, fallback: number): number {
   if (value === undefined || value === null) return fallback;
@@ -42,7 +46,8 @@ function toNumber(value: unknown, fallback: number): number {
 }
 
 function coercePlanDurationWeeks(n: number): PlanDurationWeeks {
-  if (n === 6 || n === 12 || n === 16 || n === 18 || n === 20 || n === 24 || n === 40 || n === 48) return n;
+  if (n === 6 || n === 12 || n === 16 || n === 18 || n === 20 || n === 24 || n === 40 || n === 48)
+    return n;
   if (!Number.isFinite(n)) return 12;
   const order: PlanDurationWeeks[] = [6, 12, 16, 18, 20, 24, 40, 48];
   return order.reduce((pick, w) => (Math.abs(w - n) < Math.abs(pick - n) ? w : pick), 12);
@@ -201,6 +206,17 @@ const TILE_WORKSTREAM_IDS = new Set<string>([
   "two",
   "three",
   "four",
+  "gantt_admin",
+  "gantt_data",
+  "gantt_tech",
+  "gantt_audiences",
+  "gantt_channels",
+  "gantt_email",
+  "gantt_sms",
+  "gantt_whatsapp",
+  "gantt_web_mobile",
+  "gantt_messaging",
+  "gantt_analytics",
 ]);
 
 function normalizeTileWorkstream(raw: unknown): TileRecord["Workstream"] {
@@ -218,6 +234,41 @@ function pickMultiLineField(record: Record<string, unknown>, preferredKeys: stri
     if (v !== undefined && v !== null && String(v).trim() !== "") return String(v);
   }
   return "";
+}
+
+function pickAgendaOutcomesField(record: Record<string, unknown>): string {
+  const direct = pickMultiLineField(record, [
+    "Agenda_Outcomes",
+    "Agenda & Outcomes",
+    "agenda_outcomes",
+    "Agenda_Outcomes",
+  ]);
+  if (direct) return direct;
+  const agenda = pickMultiLineField(record, ["Agenda", "agenda"]);
+  const outcomes = pickMultiLineField(record, [
+    "Desired_Outcomes",
+    "Desired Outcomes",
+    "desired_outcomes",
+  ]);
+  if (agenda && outcomes) return `${agenda}\n\n${outcomes}`;
+  return agenda || outcomes;
+}
+
+function pickRelatedTasksField(record: Record<string, unknown>): string {
+  return pickMultiLineField(record, [
+    "Related_Tasks",
+    "Related Tasks",
+    "related_tasks",
+    "Resources",
+    "resources",
+  ]);
+}
+
+function mongoDrawerFieldsForSeedTile(title: string): Pick<
+  TileRecord,
+  "Description" | "Attendees" | "Agenda_Outcomes" | "Related_Tasks"
+> {
+  return defaultDrawerFieldsFromMeetingsSheet(title);
 }
 
 function normalizeConfig(record: Record<string, unknown>): ConfigRecord {
@@ -377,9 +428,8 @@ function normalizeTile(record: Record<string, unknown>): TileRecord {
     Notes: String(record.Notes ?? ""),
     Description: String(record.Description ?? ""),
     Attendees: pickMultiLineField(record, ["Attendees", "attendees", "Suggested Attendees"]),
-    Agenda: pickMultiLineField(record, ["Agenda", "agenda"]),
-    Resources: pickMultiLineField(record, ["Resources", "resources"]),
-    Desired_Outcomes: pickMultiLineField(record, ["Desired_Outcomes", "Desired Outcomes", "desired_outcomes"]),
+    Agenda_Outcomes: pickAgendaOutcomesField(record),
+    Related_Tasks: pickRelatedTasksField(record),
     activityLed: parseCustomerActivityLed(
       record.Activity_Led ?? record.activity_led ?? record.activityLed,
     ),
@@ -474,13 +524,8 @@ export async function createConfigWithSeed(input: {
   const wsBottomHex = parseHexColorOptional(input.workstreamGradientBottomColor);
   const logoDataUrl = normalizeLogoDataUrl(input.logoDataUrl);
   const isBrazeCore = input.productType !== "AI Decisioning Studio";
-  const defaultOrderRail = railColorResolverForWorkstreamOrder(
-    [...BRAZE_CORE_WORKSTREAM_IDS],
-    wsTopHex,
-    wsBottomHex,
-  );
   const defaultWorkstreamOrderJson = JSON.stringify(
-    normalizeBrazeCoreWorkstreamOrder(undefined, defaultOrderRail),
+    BRAZE_CORE_WORKSTREAM_IDS.map((id) => ({ workstream: id })),
   );
 
   await configs.insertOne({
@@ -526,6 +571,7 @@ export async function createConfigWithSeed(input: {
   ).map((tile) => {
     const slug = tile.Tile_ID;
     const rowId = compositeTileRowId(configId, slug);
+    const drawer = mongoDrawerFieldsForSeedTile(tile.Title);
     return {
       ID: rowId,
       Title_ID: slug,
@@ -538,11 +584,10 @@ export async function createConfigWithSeed(input: {
       Row_Span: Math.max(1, Math.round(Number(tile.Row_Span) || 1)),
       Category: tile.Category,
       Notes: "",
-      Description: "",
-      Attendees: "",
-      Agenda: "",
-      Resources: "",
-      Desired_Outcomes: "",
+      Description: drawer.Description ?? "",
+      Attendees: drawer.Attendees ?? "",
+      Agenda_Outcomes: drawer.Agenda_Outcomes ?? "",
+      Related_Tasks: drawer.Related_Tasks ?? "",
       Level_Of_Effort: "",
       ...(tile.Category === "customer_activity" ? { Activity_Led: "customer" } : {}),
     };
@@ -550,6 +595,9 @@ export async function createConfigWithSeed(input: {
 
   if (seedTiles.length > 0) {
     await tiles.insertMany(seedTiles);
+  }
+  if (input.productType !== "AI Decisioning Studio" && usesPlanTaskGantt(input.planOptionId)) {
+    await seedGanttTasksForConfig(configId, input.planOptionId);
   }
   await upsertConfigLogoDataUrl(configId, logoDataUrl);
 
@@ -588,15 +636,23 @@ export async function duplicateConfig(sourceConfigId: string, createdBy: string)
   const wsBottomHex = parseHexColorOptional(source.workstreamGradientBottomColor ?? "");
   const sourceLogoDataUrl = normalizeLogoDataUrl(source.logoDataUrl);
   const isBrazeCore = source.Product_Type !== "AI Decisioning Studio";
-  const dupOrderRail = railColorResolverForWorkstreamOrder(
+  const dupOrderIds =
     source.brazeCoreWorkstreamOrder?.length
       ? brazeWorkstreamOrderIds(source.brazeCoreWorkstreamOrder)
-      : [...BRAZE_CORE_WORKSTREAM_IDS],
-    wsTopHex,
-    wsBottomHex,
-  );
+      : [...BRAZE_CORE_WORKSTREAM_IDS];
+  const dupOrderEntries: BrazeWorkstreamOrderEntry[] = dupOrderIds.map((id) => {
+    const fromSource = source.brazeCoreWorkstreamOrder?.find((e) => e.workstream === id);
+    if (fromSource?.labelContrastUserSet) {
+      return {
+        workstream: id,
+        type: fromSource.type,
+        labelContrastUserSet: true,
+      };
+    }
+    return { workstream: id, type: "w" };
+  });
   const defaultWorkstreamOrderJson = JSON.stringify(
-    normalizeBrazeCoreWorkstreamOrder(undefined, dupOrderRail),
+    serializeBrazeWorkstreamOrderForMongo(dupOrderEntries),
   );
 
   await configs.insertOne({
@@ -651,9 +707,8 @@ export async function duplicateConfig(sourceConfigId: string, createdBy: string)
     Notes: t.Notes ?? "",
     Description: t.Description ?? "",
     Attendees: t.Attendees ?? "",
-    Agenda: t.Agenda ?? "",
-    Resources: t.Resources ?? "",
-    Desired_Outcomes: t.Desired_Outcomes ?? "",
+    Agenda_Outcomes: t.Agenda_Outcomes ?? "",
+    Related_Tasks: t.Related_Tasks ?? "",
     Level_Of_Effort: t.Level_Of_Effort ?? "",
     ...(t.Category === "customer_activity"
       ? { Activity_Led: parseCustomerActivityLed(t.activityLed) }
@@ -677,9 +732,8 @@ type TileLayoutPatch = Pick<TileRecord, "Tile_ID" | "Start_Week" | "Workstream">
   Title?: string;
   Description?: string;
   Attendees?: string;
-  Agenda?: string;
-  Resources?: string;
-  Desired_Outcomes?: string;
+  Agenda_Outcomes?: string;
+  Related_Tasks?: string;
   activityLed?: TileRecord["activityLed"];
   /** Mongo **Level_Of_Effort** (accepts `levelOfEffort` alias). */
   Level_Of_Effort?: string;
@@ -712,10 +766,9 @@ export async function patchTilesLayout(
       if (update.Span_Weeks !== undefined) set.Span_Weeks = update.Span_Weeks;
       if (update.Title !== undefined) set.Title = update.Title;
       if (update.Description !== undefined) set.Description = update.Description;
-      if (update.Agenda !== undefined) set.Agenda = update.Agenda;
       if (update.Attendees !== undefined) set.Attendees = update.Attendees;
-      if (update.Resources !== undefined) set.Resources = update.Resources;
-      if (update.Desired_Outcomes !== undefined) set.Desired_Outcomes = update.Desired_Outcomes;
+      if (update.Agenda_Outcomes !== undefined) set.Agenda_Outcomes = update.Agenda_Outcomes;
+      if (update.Related_Tasks !== undefined) set.Related_Tasks = update.Related_Tasks;
       if (update.activityLed !== undefined) set.Activity_Led = update.activityLed;
       const levelOfEffort = levelOfEffortFromTilePatch(update);
       if (levelOfEffort !== undefined) set.Level_Of_Effort = levelOfEffort;
@@ -746,7 +799,7 @@ export async function createTileRow(
     Partial<
       Pick<
         TileRecord,
-        "Attendees" | "Agenda" | "Resources" | "Desired_Outcomes" | "activityLed" | "Level_Of_Effort"
+        "Attendees" | "Agenda_Outcomes" | "Related_Tasks" | "activityLed" | "Level_Of_Effort"
       >
     >,
 ): Promise<void> {
@@ -767,9 +820,8 @@ export async function createTileRow(
     Notes: tile.Notes ?? "",
     Description: tile.Description ?? "",
     Attendees: tile.Attendees ?? "",
-    Agenda: tile.Agenda ?? "",
-    Resources: tile.Resources ?? "",
-    Desired_Outcomes: tile.Desired_Outcomes ?? "",
+    Agenda_Outcomes: tile.Agenda_Outcomes ?? "",
+    Related_Tasks: tile.Related_Tasks ?? "",
     Level_Of_Effort: tile.Level_Of_Effort ?? "",
     ...(tile.Category === "customer_activity"
       ? { Activity_Led: parseCustomerActivityLed(tile.activityLed) }
@@ -796,6 +848,7 @@ export async function replaceTilesForConfigSeed(input: {
         })
   ).map((tile) => {
     const slug = tile.Tile_ID;
+    const drawer = mongoDrawerFieldsForSeedTile(tile.Title);
     return {
       ID: compositeTileRowId(configId, slug),
       Title_ID: slug,
@@ -808,11 +861,10 @@ export async function replaceTilesForConfigSeed(input: {
       Row_Span: Math.max(1, Math.round(Number(tile.Row_Span) || 1)),
       Category: tile.Category,
       Notes: "",
-      Description: "",
-      Attendees: "",
-      Agenda: "",
-      Resources: "",
-      Desired_Outcomes: "",
+      Description: drawer.Description ?? "",
+      Attendees: drawer.Attendees ?? "",
+      Agenda_Outcomes: drawer.Agenda_Outcomes ?? "",
+      Related_Tasks: drawer.Related_Tasks ?? "",
       Level_Of_Effort: "",
       ...(tile.Category === "customer_activity" ? { Activity_Led: "customer" } : {}),
     };
@@ -864,10 +916,15 @@ export async function patchConfig(
   if (updates.Password !== undefined) set.Password = updates.Password;
   if (updates.handoffDocUrl !== undefined) set.URL = updates.handoffDocUrl;
   if (updates.brazeCoreWorkstreamOrder !== undefined) {
-    const railFallback = (ws: Workstream) =>
-      WORKSTREAMS.find((w) => w.id === ws)?.color ?? "#300266";
     set.Workstream_Order = JSON.stringify(
-      normalizeBrazeCoreWorkstreamOrder(updates.brazeCoreWorkstreamOrder, railFallback),
+      serializeBrazeWorkstreamOrderForMongo(
+        normalizeBrazeWorkstreamOrderForStorage(
+          updates.brazeCoreWorkstreamOrder,
+          updates.workstreamGradientTopColor,
+          updates.workstreamGradientBottomColor,
+          true,
+        ),
+      ),
     );
   }
   if (updates.onboardingSessionTileColor !== undefined) {

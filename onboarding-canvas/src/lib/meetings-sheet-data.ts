@@ -1,0 +1,126 @@
+// Auto-generated from Copy of ServCon Implementation Task List.xlsx (Meetings sheet).
+
+import type { TileRecord } from "@/lib/types";
+
+export type MeetingsSheetContent = {
+  description: string;
+  attendees: string;
+  agendaOutcomes: string;
+  relatedTasks: string;
+};
+
+/** Template tile titles → Meetings tab copy (blank when the sheet cell is empty). */
+export const MEETINGS_SHEET_BY_TILE_TITLE: Record<string, MeetingsSheetContent> = {
+  "Project Kick-Off": {
+    "description": "The formal start of the onboarding, bringing together all key stakeholders to introduce the project team, walk through the onboarding plan and timeline, and establish ways of working.",
+    "attendees": "Executive Sponsor\nProject Manager\nMarketing Lead\nMarketing End-User(s)\nTechnical Lead",
+    "agendaOutcomes": "Introductions across both teams and role assignments\nFinalise onboarding scope\nConfirm meeting cadence and communication channels\nAgree on immediate next steps and week 1 actions",
+    "relatedTasks": ""
+  },
+  "Platform Governance & Security": {
+    "description": "A guided walkthrough of the Braze dashboard combined with a working session on platform governance setup. This equips the team to navigate Braze confidently and makes the key foundational decisions around users, permissions, workspaces, and governance controls.",
+    "attendees": "Project Manager\nBraze Admin\nMarketing Lead\nMarketing End-User(s)\nTechnical Lead\nEngineers (Optional)\nIT/Security",
+    "agendaOutcomes": "Guided tour of the Braze dashboard and core navigation\nConfigure SSO and automated user provisioning approach\nPlan workspace structure and user permissions model\nDiscuss Teams, tagging strategy, and frequency capping approach\nAssign owners for each governance task",
+    "relatedTasks": "Add Dashboard Users\nManage Braze User Permissions\nSetup Teams (Optional)\nSetup SAML, Single Sign-On (SSO) & Automated User Provisioning\nConfigure Braze Workspaces\nEstablish a Global Tagging Strategy\nConfigure Frequency Capping Rules"
+  },
+  "Setup Governance & Security": {
+    "description": "A guided walkthrough of the Braze dashboard combined with a working session on platform governance setup. This equips the team to navigate Braze confidently and makes the key foundational decisions around users, permissions, workspaces, and governance controls.",
+    "attendees": "Project Manager\nBraze Admin\nMarketing Lead\nMarketing End-User(s)\nTechnical Lead\nEngineers (Optional)\nIT/Security",
+    "agendaOutcomes": "Guided tour of the Braze dashboard and core navigation\nConfigure SSO and automated user provisioning approach\nPlan workspace structure and user permissions model\nDiscuss Teams, tagging strategy, and frequency capping approach\nAssign owners for each governance task",
+    "relatedTasks": "Add Dashboard Users\nManage Braze User Permissions\nSetup Teams (Optional)\nSetup SAML, Single Sign-On (SSO) & Automated User Provisioning\nConfigure Braze Workspaces\nEstablish a Global Tagging Strategy\nConfigure Frequency Capping Rules"
+  },
+  "Weekly Project Management Alignment Calls": {
+    "description": "A recurring standing meeting throughout the onboarding to track progress against the plan, surface blockers, and keep momentum.",
+    "attendees": "Project Manager\nMarketing Lead\nMarketing End-User(s)\nTechnical Lead\nEngineers (Optional)",
+    "agendaOutcomes": "Review progress against the plan since last sync\nSurface and assign owners to any blockers or risks\nConfirm priorities and actions for the coming week\nOpen questions and support needs",
+    "relatedTasks": ""
+  },
+  "Campaign & Data Planning Workshops": {
+    "description": "A series of collaborative working sessions to define the P1/P2/P3 campaign roadmap and, from it, the custom data strategy needed to power those campaigns. These sessions are the strategic foundation for the technical and channel work that follows.",
+    "attendees": "Project Manager\nMarketing Lead\nMarketing End-User(s)\nTechnical Lead\nEngineers (Optional)",
+    "agendaOutcomes": "Audit existing campaigns and identify migration candidates\nDefine net new campaigns and journeys for Braze\nPrioritise into P1/P2/P3 with rationale\nMap the data (attributes, events, properties) each campaign requires\nDocument the data specification for engineering",
+    "relatedTasks": "Campaign Planning\nData Planning"
+  },
+  "Tech Overview": {
+    "description": "A discovery session to review your architecture diagrams, build a deeper understanding of your tech stack, and confirm the technical scope and timelines for the integration.",
+    "attendees": "Project Manager\nMarketing Lead\nEngineering / Technical Lead\nFront/Back End Engineer(s) \nData / Analytics Team,",
+    "agendaOutcomes": "Review technical survey and architecture diagrams\nGain a deeper understanding of the tech stack\nConfirm technical scope and timelines",
+    "relatedTasks": ""
+  },
+  "SDK Deep Dive": {
+    "description": "A focused deep dive into the SDK integration, walking through the full scope of what the SDK enables, from user data collection through to the channels and features it powers.",
+    "attendees": "Project Manager\nMarketing Lead\nEngineering / Technical Lead\nFront End Engineer(s)",
+    "agendaOutcomes": "Walkthrough of the SDK integration\nDiscuss user profile lifecycle & user data collection\nDiscuss configuration of channels including push, in-app messages, content cards and banners\nAgree on SDK implementation approach and testing",
+    "relatedTasks": "SDK Integration (iOS, Android, Web), Configure Push Notifications, Set Up In-App Messages, Set Up Content Cards"
+  },
+  "API Deep Dive": {
+    "description": "A deep dive focused on the structure of REST API calls, transactional messaging, data payloads, and how backend systems will send data to and trigger messages from Braze.",
+    "attendees": "Project Manager\nMarketing Lead\nEngineering / Technical Lead\nBack End Engineer(s)",
+    "agendaOutcomes": "Review REST API endpoints relevant to the use cases\nWalk through payload structure and identifier mapping\nDiscuss rate limits, batching, and error handling\nConfirm which triggers and data flows are server-side\nAgree on API implementation approach and testing",
+    "relatedTasks": "REST API Integration"
+  },
+  "Reporting & Analytics": {
+    "description": "An optional session to define your reporting and analytics needs, ensuring the right dashboards, reports, and data exports are set up to measure success from go-live.",
+    "attendees": "Project Manager\nMarketing Lead\nEngineering / Technical Lead\nBack End Engineer(s) \nData / Analytics Team",
+    "agendaOutcomes": "Review out-of-the-box reporting and Dashboard Builder capabilities\nDiscuss conversion events and how success is measured\nDetermine any data export needs (Currents, Snowflake)\nAgree on reporting structure and owners",
+    "relatedTasks": "Set Up Reporting"
+  },
+  "QA & Testing": {
+    "description": "An optional session to walk your team through the QA resources available to them ahead of go-live, including the Braze production readiness guide and the QA features built into the dashboard.",
+    "attendees": "Project Manager\nMarketing Lead\nEngineering / Technical Lead\nFront/Back End Engineer(s) \nQA Specialist (Optional)",
+    "agendaOutcomes": "Walk through the Braze production readiness guide\nReview the QA features available in the dashboard\nDiscuss recommended testing approaches and best practices",
+    "relatedTasks": "QA & Testing"
+  },
+  "Email Discovery Workshop": {
+    "description": "This session covers the technical setup of sending domains and authentication as well as best practices for deliverability and IP Warming.",
+    "attendees": "Project Manager\nMarketing Lead\nMarketing End-User(s)",
+    "agendaOutcomes": "Walk through sending domain and authentication setup (SPF, DKIM, DMARC)\nDiscuss subdomain strategy and IP structure\nBegin planning the IP Warming\nReview email deliverability best practices",
+    "relatedTasks": "Configure Sending Domains (SPF, DKIM, DMARC)\nDevelop IP Warming Plan\nBuild Email Templates\nConfigure Unsubscribe & Preference Centre"
+  },
+  "Pre IP Warming Workshop": {
+    "description": "A checkpoint session to confirm everything is in place before IP warming begins, including the warming plan, the engagement attribute for prioritising engaged users, and the campaigns needed to run the warming schedule.",
+    "attendees": "Project Manager\nMarketing Lead\nMarketing End-User(s)",
+    "agendaOutcomes": "Review and confirm the IP warming plan and schedule\nConfirm segmentation for IP warming\nDecide automated vs manual warming approach\nConfirm warming campaigns and audiences are ready\nAgree on monitoring approach and escalation criteria",
+    "relatedTasks": "Execute IP Warming (Automated)\nExecute IP Warming (Manual)"
+  },
+  "SMS Discovery Workshop": {
+    "description": "A session to walk you through SMS compliance and best practices and the SMS provisioning process and requirements",
+    "attendees": "Project Manager\nMarketing Lead\nMarketing End-User(s)\nLegal / Compliance (Optional)",
+    "agendaOutcomes": "Determine number strategy (long code, short code, or migration)\nKick off provisioning and regulatory registration (10DLC, etc.)\nDiscuss subscription groups and opt-in/opt-out approach\nReview quiet hours and compliance requirements\nConfirm timelines given carrier lead times",
+    "relatedTasks": "Set Up Long Code\nSet Up Short Code\nMigrate Codes from Existing Provider\nConfigure Opt-In & Opt-Out Keywords\nBuild SMS Messages\nSet Up Quiet Hours"
+  },
+  "SMS Enablement": {
+    "description": "A follow-up session once provisioning is progressing, focused on building the SMS messages, finalising keyword and compliance configuration, and preparing for launch, including migration cutover if applicable.",
+    "attendees": "Project Manager\nMarketing Lead\nMarketing End-User(s)\nLegal / Compliance (Optional)",
+    "agendaOutcomes": "Review SMS messages for P1 campaigns\nFinalise opt-in/opt-out keyword configuration and responses\nConfirm quiet hours settings\nPlan migration cutover (if migrating)\nReview testing approach",
+    "relatedTasks": "Set Up Long Code\nSet Up Short Code\nMigrate Codes from Existing Provider\nConfigure Opt-In & Opt-Out Keywords\nBuild SMS Messages\nSet Up Quiet Hours"
+  },
+  "WhatsApp Discovery Workshop": {
+    "description": "A session to initiate the WhatsApp channel workstream, focussed on the account setup and verification tasks, including phone number procurement and the Meta Business Account requirements.",
+    "attendees": "Project Manager\nMarketing Lead\nMarketing End-User(s)\nMeta Business Admin\nLegal / Compliance (Optional)",
+    "agendaOutcomes": "Walk through phone number requirements and procurement options\nUnderstand the Meta Business Account and WABA structure\nKick off business verification\nDiscuss opt-in strategy and content rules",
+    "relatedTasks": "Procure WhatsApp Phone Number\nWhatsApp Business Account Setup & Verification\nConfigure Opt-In & Opt-Out"
+  },
+  "WABA Process Walkthrough": {
+    "description": "A follow-up session once your account is set up and verified, focused on building message templates, configuring opt-in/opt-out, and optionally setting up WhatsApp Flows ahead of launch.",
+    "attendees": "Project Manager\nMarketing Lead\nMarketing End-User(s)",
+    "agendaOutcomes": "Build and submit message templates for Meta approval\nConfigure opt-in collection and opt-out handling\nReview subscription group management approach\nPlan WhatsApp Flows if in scope",
+    "relatedTasks": "Set Up WhatsApp Message Templates\nConfigure Opt-In & Opt-Out\nSet Up WhatsApp Flows"
+  }
+} as const;
+
+export function defaultDrawerFieldsFromMeetingsSheet(title: string): Pick<
+  TileRecord,
+  "Description" | "Attendees" | "Agenda_Outcomes" | "Related_Tasks"
+> {
+  const row = MEETINGS_SHEET_BY_TILE_TITLE[title.trim()];
+  if (!row) {
+    return { Description: "", Attendees: "", Agenda_Outcomes: "", Related_Tasks: "" };
+  }
+  return {
+    Description: row.description,
+    Attendees: row.attendees,
+    Agenda_Outcomes: row.agendaOutcomes,
+    Related_Tasks: row.relatedTasks,
+  };
+}
