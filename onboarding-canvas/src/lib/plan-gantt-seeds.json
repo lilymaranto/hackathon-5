@@ -678,10 +678,11 @@
         "resources": "https://www.braze.com/docs/user_guide/channels/sms_mms_and_rcs/message_features_and_optimization/keyword_processing/optin_optout",
         "levelOfEffort": "Low",
         "startWeek": 12,
-        "spanWeeks": 1,
+        "spanWeeks": 2,
         "minSpanWeeks": 1,
         "weekMarks": {
-          "12": "1"
+          "12": "1",
+          "13": "x"
         }
       },
       {
